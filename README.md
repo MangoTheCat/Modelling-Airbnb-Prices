@@ -1749,8 +1749,8 @@ train_X.shape, test_X.shape
 
 One Hot Encoding has created lots of features, so we will probably need to select the most usefull features.
 
----------------------------------------------------------------------------------------------------------------------------------------# RANDOM FOREST REGRESSOR
----------------------------------------------------------------------------------------------------------------------------------------
+
+# RANDOM FOREST REGRESSOR
 
 ## Without feature selection
 
