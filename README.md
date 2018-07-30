@@ -1,8 +1,3 @@
----
-output:
-  html_document: default
-  word_document: default
----
 
 This post aims at modelling the prices of Airbnb appartments in London. In other words, the aim is to build our own price suggestion model. The data used in this post has been downloaded from the http://insideairbnb.com/ website. The data has been collected in April 2018. This work is inspired from the [`Airbnb price prediction model built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi`](https://d1no007.github.io/OptiBnB/).
 
