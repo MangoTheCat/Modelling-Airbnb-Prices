@@ -390,24 +390,6 @@ Let's have a look at the `data` dataframe to see the remaining features.
 ```python
 data.head()
 ```
-
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -558,7 +540,6 @@ data.head()
     </tr>
   </tbody>
 </table>
-<p>5 rows Ã 31 columns</p>
 </div>
 
 
@@ -620,24 +601,6 @@ Now, I only have 1072 different zipcodes, which is much better than before. Let'
 ```python
 data.head()
 ```
-
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -788,7 +751,6 @@ data.head()
     </tr>
   </tbody>
 </table>
-<p>5 rows Ã 28 columns</p>
 </div>
 
 
@@ -952,30 +914,6 @@ corr_df = pd.DataFrame(data = corr_matrix, columns = temp_data.columns,
 
 corr_df
 ```
-
-    C:\Users\cbarret\AppData\Local\Continuum\anaconda3\lib\site-packages\numpy\lib\function_base.py:3183: RuntimeWarning: invalid value encountered in true_divide
-      c /= stddev[:, None]
-    C:\Users\cbarret\AppData\Local\Continuum\anaconda3\lib\site-packages\numpy\lib\function_base.py:3184: RuntimeWarning: invalid value encountered in true_divide
-      c /= stddev[None, :]
-    
-
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1678,7 +1616,6 @@ corr_df
     </tr>
   </tbody>
 </table>
-<p>28 rows Ã 28 columns</p>
 </div>
 
 
@@ -1760,24 +1697,6 @@ Let's have a last look at the `data` dataframe:
 ```python
 data.iloc[0:6, 0:10]
 ```
-
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1883,24 +1802,6 @@ data.iloc[0:6, 0:10]
 ```python
 data.iloc[0:6, 11:22]
 ```
-
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
