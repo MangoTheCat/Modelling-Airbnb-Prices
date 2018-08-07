@@ -629,7 +629,7 @@ plt.show()
 ```
 
 
-![png](plots/output_22_0.png)
+![png](plots/output_21_0.png)
 
 
 As we can see, the `jurisdiction_names` feature is 100% empty, so we delete this one. The `neighbourhood`, `cleaning_fee` and `security_deposit` are more than 40% empty. I think this is too much so I decide to delete these features too. The last feature which has emptiness is `zipcode`, but it shows very few emptiness so I will be able to use this feature in my model using an imputer.
