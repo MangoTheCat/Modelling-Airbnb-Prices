@@ -1,21 +1,55 @@
+# Table of contents
+1. [Introduction](#introduction)
+2. [Data Preprocessing](#preprocessing)
+    1. [Data Import](#import_data)
+    2. [Feature Selection](#selection)
+        1. [Selection on Numerical Features](#selection_num)
+        2. [Feature Emptiness Evaluation](#selection_empty)
+        3. [Selection on Categorical Features](#selection_cat)
+        4. [Multicollinearity Evaluation](#selection_multicol)
+    3. [Manipulation on Price Columns](#price_col)
+    4. [One Hot Encoding for Categorical Features](#one_hot)
+    5. [Data Splitting: Features / labels - Training set / testing set](#data_split)
+    6. [Numpy Arrays Transformation](#numpy_array)
+3. [Modelling](#modelling)
+    1. [Application of the Random Forest Regressor](#RF)
+        1. [With default hyperparameters](#RF_def)
+        2. [Hyperparameters tuning](#RF_tuned)
+            1. [Randomized Search with Cross Validation](#RF_random_search)
+            2. [Grid Search with Cross Validation](#RF_grid_search)
+    2. [Application of the Gradient Boosting Regressor](#XGB)
+        1. [With default hyperparameters](#XGB_def)
+        2. [Hyperparameters tuning](#XGB_tuned)
+            1. [Grid Search with Cross Validation](#XGB_grid_search)
+    3. [Application of the Multi Layer Perceptron Regressor](#MLP)
+        1. [With default hyperparameters](#MLP_def)
+        2. [Hyperparameters tuning](#MLP_tuned)
+            1. [Grid Search with Cross Validation](#MLP_grid_search)
+4. [Visualision of the models' performance](#conclusion)
+    
 
-This post aims at modelling the prices of Airbnb appartments in London. In other words, the aim is to build our own price suggestion model. The data used in this post has been downloaded from the http://insideairbnb.com/ website. The data has been collected in April 2018. This work is inspired from the Airbnb price prediction model built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi.
+# Introduction <a name="introduction"></a>
+This post aims at modelling the **prices of Airbnb appartments in London**. In other words, the aim is to build our own price suggestion model. The data used in this post has been downloaded from the http://insideairbnb.com/ website and was collected in April 2018. This work is inspired from the [`Airbnb price prediction model built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi`](https://d1no007.github.io/OptiBnB/).
 
 This post contains two main parts:
-* the data preprocessing, which aims at cleaning the data and selecting the most useful features for the models.
-* the modelling with 3 different algorithms: Random Forests, XGBoost and a Neural Network.
+* the **data preprocessing**, which aims at cleaning the data and selecting the most useful features for the models.
+* the **modelling** with 3 different algorithms: Random Forests, XGBoost and a Neural Network.
 
-The libraries used are the following:
+The Python 3.5 libraries used are the following:
 * pandas
 * matplotlib
 * numpy
-* collection
-* scikit-learn
+* collections
+* sklearn
 * xgboost
+* random
+* math
+* pprint
 
 Let's start with the first part, data preprocessing.
 
-# Data Preprocessing
+
+# Data Preprocessing <a name="preprocessing"></a>
 
 The first thing to do is to set the seed in order to be able to reproduce the results.
 
@@ -25,7 +59,7 @@ import random
 random.seed(42)
 ```
 
-## Import data 
+## Data Import <a name="import_data"></a>
 
 Then I import the listings gathered in the csv file.
 
@@ -74,7 +108,7 @@ print(data.columns)
 
 As this file has 95 columns, I decide to have a look at the features names to delete the ones that directly seem useless. This is my first feature selection step.
 
-## Feature Selection
+## Feature Selection <a name="selection"></a>
 
 
 ```python
@@ -92,19 +126,34 @@ useless = ['id', 'listing_url', 'scrape_id', 'last_scraped', 'name', 'summary',
 data.drop(useless, axis=1, inplace=True)
 ```
 
-I also decide to delete the following features as they are only available for old Airbnb appartments. Let's imagine that I am new on Airbnb and I want to rent my appartment. At that time, I won't have any review score for my appartment. This is what is called leaky predictors, and these features should not be part of my model.
+I also decide to delete the following features as they are only available for old Airbnb appartments. Let's imagine that I am new on Airbnb and I want to rent my appartment. At that time, I won't have any review score for my appartment. These ones are called leaky predictors, and should not be part of my model.
 
 
 ```python
 # Drop reviews features as they are not available for new apartments in Airbnb
-useless = ['number_of_reviews', 'first_review', 'last_review', 'review_scores_rating',
-           'review_scores_accuracy', 'review_scores_cleanliness',
-           'review_scores_checkin', 'review_scores_communication',
-           'review_scores_location', 'review_scores_value', 'reviews_per_month']
-data.drop(useless, axis=1, inplace=True)
+data.drop(list(data.filter(regex = 'review')), axis = 1, inplace = True)
 ```
 
-### Selection on numerical data
+
+```python
+print(data.columns)
+```
+
+    Index(['host_total_listings_count', 'street', 'neighbourhood',
+           'neighbourhood_cleansed', 'neighbourhood_group_cleansed', 'zipcode',
+           'latitude', 'longitude', 'property_type', 'room_type', 'accommodates',
+           'bathrooms', 'bedrooms', 'beds', 'bed_type', 'amenities', 'square_feet',
+           'price', 'security_deposit', 'cleaning_fee', 'guests_included',
+           'extra_people', 'minimum_nights', 'maximum_nights', 'calendar_updated',
+           'has_availability', 'availability_30', 'availability_60',
+           'availability_90', 'availability_365', 'calendar_last_scraped',
+           'requires_license', 'license', 'jurisdiction_names', 'instant_bookable',
+           'cancellation_policy', 'require_guest_profile_picture',
+           'require_guest_phone_verification', 'calculated_host_listings_count'],
+          dtype='object')
+    
+
+### Selection on Numerical Features <a name="selection_num"></a>
 
 Let's have a look at the numerical variables. Using the `describe` function, we are able to spot the features which have missing values.
 
@@ -112,6 +161,7 @@ Let's have a look at the numerical variables. Using the `describe` function, we 
 ```python
 data.describe()
 ```
+
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -316,7 +366,6 @@ data.describe()
     </tr>
   </tbody>
 </table>
-</div>
 
 
 
@@ -324,12 +373,222 @@ As we can see, the features `neighbourhood_group_cleansed`, `license` and `has_a
 
 
 ```python
-# Drop count = 0 and count < 600 (square_feet)
-useless = ['neighbourhood_group_cleansed', 'license', 'has_availability', 'square_feet']
-data.drop(useless, axis=1, inplace=True)
+count_data = data.describe().loc['count', ]<600 
+count_data
 ```
 
-### Feature Emptiness
+
+
+
+    host_total_listings_count         False
+    neighbourhood_group_cleansed       True
+    latitude                          False
+    longitude                         False
+    accommodates                      False
+    bathrooms                         False
+    bedrooms                          False
+    beds                              False
+    square_feet                        True
+    guests_included                   False
+    minimum_nights                    False
+    maximum_nights                    False
+    has_availability                   True
+    availability_30                   False
+    availability_60                   False
+    availability_90                   False
+    availability_365                  False
+    license                            True
+    calculated_host_listings_count    False
+    Name: count, dtype: bool
+
+
+
+
+```python
+# Drop count < 600 (neighbourhood_group_cleansed, square_feet, has_availability, license)
+for i in range(len(count_data)):
+        if count_data[i]:
+            data.drop(count_data.index[i], axis=1, inplace=True)
+    
+```
+
+
+```python
+data.describe()
+```
+
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>host_total_listings_count</th>
+      <th>latitude</th>
+      <th>longitude</th>
+      <th>accommodates</th>
+      <th>bathrooms</th>
+      <th>bedrooms</th>
+      <th>beds</th>
+      <th>guests_included</th>
+      <th>minimum_nights</th>
+      <th>maximum_nights</th>
+      <th>availability_30</th>
+      <th>availability_60</th>
+      <th>availability_90</th>
+      <th>availability_365</th>
+      <th>calculated_host_listings_count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>count</th>
+      <td>53895.000000</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+      <td>53644.000000</td>
+      <td>53811.000000</td>
+      <td>53731.000000</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+      <td>5.390400e+04</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+      <td>53904.000000</td>
+    </tr>
+    <tr>
+      <th>mean</th>
+      <td>15.885500</td>
+      <td>51.510425</td>
+      <td>-0.127105</td>
+      <td>3.036676</td>
+      <td>1.262751</td>
+      <td>1.353980</td>
+      <td>1.708027</td>
+      <td>1.407428</td>
+      <td>3.285229</td>
+      <td>2.683750e+05</td>
+      <td>11.830755</td>
+      <td>25.337674</td>
+      <td>40.514433</td>
+      <td>155.849789</td>
+      <td>14.976106</td>
+    </tr>
+    <tr>
+      <th>std</th>
+      <td>84.700442</td>
+      <td>0.045454</td>
+      <td>0.088346</td>
+      <td>1.907429</td>
+      <td>0.547699</td>
+      <td>0.841912</td>
+      <td>1.201165</td>
+      <td>1.040308</td>
+      <td>28.536837</td>
+      <td>2.317162e+07</td>
+      <td>12.178077</td>
+      <td>24.064923</td>
+      <td>36.383218</td>
+      <td>144.032928</td>
+      <td>81.750305</td>
+    </tr>
+    <tr>
+      <th>min</th>
+      <td>0.000000</td>
+      <td>51.292892</td>
+      <td>-0.501305</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>1.000000e+00</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <th>25%</th>
+      <td>1.000000</td>
+      <td>51.485099</td>
+      <td>-0.187191</td>
+      <td>2.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>6.000000e+01</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>9.000000</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <th>50%</th>
+      <td>1.000000</td>
+      <td>51.514730</td>
+      <td>-0.122403</td>
+      <td>2.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>2.000000</td>
+      <td>1.125000e+03</td>
+      <td>8.000000</td>
+      <td>20.000000</td>
+      <td>36.000000</td>
+      <td>92.000000</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <th>75%</th>
+      <td>3.000000</td>
+      <td>51.538943</td>
+      <td>-0.069183</td>
+      <td>4.000000</td>
+      <td>1.500000</td>
+      <td>2.000000</td>
+      <td>2.000000</td>
+      <td>1.000000</td>
+      <td>3.000000</td>
+      <td>1.125000e+03</td>
+      <td>26.000000</td>
+      <td>53.000000</td>
+      <td>81.000000</td>
+      <td>321.000000</td>
+      <td>3.000000</td>
+    </tr>
+    <tr>
+      <th>max</th>
+      <td>735.000000</td>
+      <td>51.683101</td>
+      <td>0.317523</td>
+      <td>16.000000</td>
+      <td>8.000000</td>
+      <td>10.000000</td>
+      <td>16.000000</td>
+      <td>16.000000</td>
+      <td>5000.000000</td>
+      <td>2.147484e+09</td>
+      <td>30.000000</td>
+      <td>60.000000</td>
+      <td>90.000000</td>
+      <td>365.000000</td>
+      <td>711.000000</td>
+    </tr>
+  </tbody>
+</table>
+
+
+
+### Feature Emptiness Evaluation <a name="selection_empty"></a>
 
 Here, I want to have a look at the feature emptiness for all the variables (numerical and categorical). We use the `percent_empty` function on all the remaining features and plot the result.
 
@@ -338,7 +597,7 @@ Here, I want to have a look at the feature emptiness for all the variables (nume
 import matplotlib.pyplot as plt
 
 def percent_empty(df):
-    
+    """This function calculate the percentage and count of missing values for a feature"""
     bools = df.isnull().tolist()
     percent_empty = float(bools.count(True)) / float(len(bools))
     
@@ -370,7 +629,7 @@ plt.show()
 ```
 
 
-![png](plots/output_19_0.png)
+![png](plots/output_22_0.png)
 
 
 As we can see, the `jurisdiction_names` feature is 100% empty, so we delete this one. The `neighbourhood`, `cleaning_fee` and `security_deposit` are more than 40% empty. I think this is too much so I decide to delete these features too. The last feature which has emptiness is `zipcode`, but it shows very few emptiness so I will be able to use this feature in my model using an imputer.
@@ -382,7 +641,7 @@ useless = ['neighbourhood', 'cleaning_fee', 'security_deposit', 'jurisdiction_na
 data.drop(useless, axis=1, inplace=True)
 ```
 
-### Selection on categorical data
+### Selection on Categorical Features <a name="selection_cat"></a>
 
 Let's have a look at the `data` dataframe to see the remaining features.
 
@@ -390,6 +649,7 @@ Let's have a look at the `data` dataframe to see the remaining features.
 ```python
 data.head()
 ```
+
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -540,27 +800,25 @@ data.head()
     </tr>
   </tbody>
 </table>
-</div>
 
 
 
-It makes me realise that the `street` feature would need some Natural Language Processing. As I don't have the knowledge needed here, and I think I have enough location information with `neighbourhood_cleansed` and `zipcode`, I decide to delete this feature.
-I also decide to delete the dates features, I might decide to add them after if my model is not great.
+It makes me realise that the `street` and `amneties` features would need some Natural Language Processing. As I don't have the knowledge needed here, and I think I have enough location information with `neighbourhood_cleansed` and `zipcode`, I decide to delete `street`. I also delete `amenities` and the dates features as I find these ones too complicated to process for the moment. I might decide to add them after if my model is not great.
 
 
 ```python
 # Drop street as we have enought localisation info (redundant)
 # Drop calendar_last_scraped and calendar_updated (date)
 
-useless = ['street', 'calendar_last_scraped', 'calendar_updated']
+useless = ['street', 'amenities', 'calendar_last_scraped', 'calendar_updated']
 data.drop(useless, axis=1, inplace=True)
 ```
 
-Now, let's have a look at the zipcode feature. The visualisation of the `data` dataframe made me realise that there are lots of different zipcodes, maybe too many?
+Now, let's have a look at the `zipcode` feature. The visualisation of the `data` dataframe made me realise that there are lots of different postcodes, maybe too many?
 
 
 ```python
-# Focus on zipcode
+# Focus on postcodes
 
 from collections import Counter
 
@@ -572,7 +830,7 @@ print("Number of Zipcodes:", len(nb_counts))
     Number of Zipcodes: 24775
     
 
-Indeed, there are too many zipcodes. If I leave this feature like that, it might cause overfitting. What I decide to do is to regroup the zipcodes. At the moment, they are separated as in the following example: KT1 1PE. I decide to only keep the first part of the zipcodes (KT1) which gives me some less precise location information.
+Indeed, there are too many postcodes. If I leave this feature like that, it might cause overfitting. What I decide to do is to regroup the postcodes. At the moment, they are separated as in the following example: KT1 1PE. I decide to only keep the first part of the postcodes (e.g. KT1) which gives me some less precise location information.
 
 
 ```python
@@ -595,12 +853,13 @@ print("Number of Zipcodes:", len(nb_counts))
     Number of Zipcodes: 1072
     
 
-Now, I only have 1072 different zipcodes, which is much better than before. Let's have a look at the `data` dataframe to be sure that the zipcodes have the correct form.
+Now, I only have 1072 different postcodes, which is much better than before. Let's have a look at the `data` dataframe to be sure that the postcodes have the correct form.
 
 
 ```python
 data.head()
 ```
+
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -751,11 +1010,10 @@ data.head()
     </tr>
   </tbody>
 </table>
-</div>
 
 
 
-Now, I want to know how many appartments are contained in each zipcode.
+Now, I want to know how many appartments are contained in each postcode.
 
 
 ```python
@@ -770,10 +1028,10 @@ plt.show()
 ```
 
 
-![png](plots/output_35_0.png)
+![png](plots/output_38_0.png)
 
 
-As we can see, lots of zipcodes only contain less than 100 appartments. Only few zipcodes contains most of the appartments. 
+As we can see, lots of postcodes only contain less than 100 appartments. Only few postcodes contains most of the appartments. 
 Let's keep these ones.
 
 
@@ -801,7 +1059,7 @@ print ('Number of entries removed: ', 53904 - data.shape[0])
 ```
 
 
-![png](plots/output_38_0.png)
+![png](plots/output_41_0.png)
 
 
     Number of entries removed:  6640
@@ -830,13 +1088,13 @@ print("Number of Neighborhoods:", len(nb_counts))
 ```
 
 
-![png](plots/output_40_0.png)
+![png](plots/output_43_0.png)
 
 
     Number of Neighborhoods: 33
     
 
-The distribution is fine, and there is only 33 neighborhoods. But some only contain around ten appartment, and this is useless for our model. So let's keep the neighborhoods that contain more than 100 appartments.
+The distribution is fine, and there is only 33 neighborhoods. But some only contain around ten appartments, and this is useless for our model. So let's keep the neighborhoods that contain more than 100 appartments.
 
 
 ```python
@@ -846,7 +1104,7 @@ data.shape
 
 
 
-    (47264, 28)
+    (47264, 27)
 
 
 
@@ -871,7 +1129,7 @@ print('Number of entries removed: ', 47264 - data.shape[0])
 ```
 
 
-![png](plots/output_43_0.png)
+![png](plots/output_46_0.png)
 
 
     Number of entries removed:  288
@@ -881,7 +1139,7 @@ By doing this, I only removed 288 rows. I still have more than 46000 rows in my 
 
 I can now go on with my feature selection by examining multicollinearity.
 
-### Examine multicollinearity
+### Multicollinearity Evaluation <a name="selection_multicol"></a>
 
 This part of the code will give me a dataframe with correlation coefficients.
 
@@ -914,6 +1172,9 @@ corr_df = pd.DataFrame(data = corr_matrix, columns = temp_data.columns,
 
 corr_df
 ```
+    
+
+
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1229,30 +1490,6 @@ corr_df
       <td>-0.000577</td>
       <td>0.003071</td>
       <td>0.026753</td>
-    </tr>
-    <tr>
-      <th>amenities</th>
-      <td>0.123145</td>
-      <td>0.022061</td>
-      <td>0.108304</td>
-      <td>-0.072186</td>
-      <td>-0.088790</td>
-      <td>-0.031701</td>
-      <td>-0.234311</td>
-      <td>0.183005</td>
-      <td>0.076684</td>
-      <td>0.137528</td>
-      <td>...</td>
-      <td>-0.001473</td>
-      <td>-0.011749</td>
-      <td>-0.013341</td>
-      <td>0.025596</td>
-      <td>NaN</td>
-      <td>-0.019693</td>
-      <td>0.082508</td>
-      <td>0.004498</td>
-      <td>0.020674</td>
-      <td>0.098828</td>
     </tr>
     <tr>
       <th>price</th>
@@ -1616,11 +1853,10 @@ corr_df
     </tr>
   </tbody>
 </table>
-</div>
 
 
 
-Here I create a nice plot to visualise the correlation between features, I can then report to the above dataframe to have more details if necessary.
+Here I create a visualisation of the correlation between features, I can then report to the above dataframe to have more details if necessary.
 
 
 ```python
@@ -1638,16 +1874,16 @@ plt.show()
 ```
 
 
-![png](plots/output_49_0.png)
+![png](plots/output_52_0.png)
 
 
-This nice plot makes me realise that `calculated_host_listings_count` is highly correlated with `host_total_listings_count`. So I decide to only keep the last one. I also see that the `availability_*` variables are correlated with each other. I decide to keep `availability_365` as this one is the less correlated with other variables. Finally, I decide to drop `requires_license` which has a weird correlation result and I think won't be useful in my model.
+This reveals that `calculated_host_listings_count` is highly correlated with `host_total_listings_count`. So I decide to only keep the last one. I also see that the `availability_*` variables are correlated with each other. I decide to keep `availability_365` as this one is the less correlated with other variables. Finally, I decide to drop `requires_license` which has an odd correlation result of NA's which will not be useful in my model.
 
 
 ```python
 # Drop calculated_host_listings_count as correlated with host_total_listings_count
 # Keep availability_365 as availability variables are correlated with each other and this one is less correlated with other variables
-# Drop requires_license (weird correlation result and won't impact the results)
+# Drop requires_license (odd correlation result and won't impact the results)
 
 useless = ['calculated_host_listings_count', 'availability_30', 'availability_60', 'availability_90', 'requires_license']
 data.drop(useless, axis=1, inplace=True)
@@ -1660,12 +1896,12 @@ The feature selection is now done. Finally, I have a dataframe with 23 features 
 print(data.shape)
 ```
 
-    (46976, 23)
+    (46976, 22)
     
 
-## Manipulation on price column --> integer
+## Manipulation on Price Columns <a name="price_col"></a>
 
-Now, I need to manipulate some features that relate to price as they have a wrong format: they contain the thousand separator (',') and the '$' symbol. Let's get rid of it and transform these features into integer.
+Now, I need to manipulate some features that relate to price as they have a price formatting: they contain the thousand separator (',') and the '$' symbol. Let's get rid of it and transform these features into integer.
 
 
 ```python
@@ -1697,6 +1933,9 @@ Let's have a last look at the `data` dataframe:
 ```python
 data.iloc[0:6, 0:10]
 ```
+
+
+
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1715,86 +1954,85 @@ data.iloc[0:6, 0:10]
   </thead>
   <tbody>
     <tr>
-      <th>40281</th>
+      <th>20958</th>
       <td>1.0</td>
-      <td>Tower Hamlets</td>
-      <td>E2</td>
-      <td>51.530636</td>
-      <td>-0.071663</td>
-      <td>Apartment</td>
+      <td>Wandsworth</td>
+      <td>SW17</td>
+      <td>51.427419</td>
+      <td>-0.155608</td>
+      <td>House</td>
       <td>Entire home/apt</td>
-      <td>2</td>
+      <td>4</td>
       <td>1.0</td>
       <td>2.0</td>
     </tr>
     <tr>
-      <th>15230</th>
-      <td>1.0</td>
-      <td>Lewisham</td>
-      <td>SE14</td>
-      <td>51.480032</td>
-      <td>-0.047274</td>
-      <td>House</td>
-      <td>Private room</td>
-      <td>2</td>
-      <td>1.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <th>33497</th>
-      <td>11.0</td>
-      <td>Camden</td>
-      <td>WC1H</td>
-      <td>51.528873</td>
-      <td>-0.124509</td>
+      <th>25318</th>
+      <td>2.0</td>
+      <td>Kensington and Chelsea</td>
+      <td>W11</td>
+      <td>51.515430</td>
+      <td>-0.201153</td>
       <td>Apartment</td>
-      <td>Private room</td>
-      <td>2</td>
+      <td>Entire home/apt</td>
+      <td>4</td>
       <td>1.0</td>
-      <td>1.0</td>
+      <td>2.0</td>
     </tr>
     <tr>
-      <th>33749</th>
-      <td>20.0</td>
-      <td>Camden</td>
-      <td>NW6</td>
-      <td>51.553488</td>
-      <td>-0.194837</td>
+      <th>18207</th>
+      <td>1.0</td>
+      <td>Merton</td>
+      <td>SW19</td>
+      <td>51.420534</td>
+      <td>-0.196860</td>
       <td>House</td>
       <td>Entire home/apt</td>
-      <td>14</td>
+      <td>6</td>
       <td>3.0</td>
       <td>4.0</td>
     </tr>
     <tr>
-      <th>12492</th>
-      <td>1.0</td>
-      <td>Southwark</td>
-      <td>SE1</td>
-      <td>51.501266</td>
-      <td>-0.071482</td>
-      <td>Apartment</td>
-      <td>Entire home/apt</td>
-      <td>2</td>
-      <td>1.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <th>18103</th>
-      <td>1.0</td>
-      <td>Merton</td>
-      <td>SW19</td>
-      <td>51.434207</td>
-      <td>-0.199953</td>
+      <th>10547</th>
+      <td>4.0</td>
+      <td>Lambeth</td>
+      <td>SW2</td>
+      <td>51.461984</td>
+      <td>-0.127700</td>
       <td>House</td>
       <td>Private room</td>
       <td>2</td>
       <td>1.0</td>
       <td>1.0</td>
     </tr>
+    <tr>
+      <th>3826</th>
+      <td>3.0</td>
+      <td>Brent</td>
+      <td>NW9</td>
+      <td>51.575707</td>
+      <td>-0.264752</td>
+      <td>House</td>
+      <td>Private room</td>
+      <td>2</td>
+      <td>1.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>43315</th>
+      <td>4.0</td>
+      <td>Islington</td>
+      <td>EC1V</td>
+      <td>51.526539</td>
+      <td>-0.091483</td>
+      <td>Apartment</td>
+      <td>Entire home/apt</td>
+      <td>4</td>
+      <td>2.0</td>
+      <td>2.0</td>
+    </tr>
   </tbody>
 </table>
-</div>
 
 
 
@@ -1802,12 +2040,13 @@ data.iloc[0:6, 0:10]
 ```python
 data.iloc[0:6, 11:22]
 ```
+
+
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th></th>
       <th>bed_type</th>
-      <th>amenities</th>
       <th>price</th>
       <th>guests_included</th>
       <th>extra_people</th>
@@ -1817,118 +2056,101 @@ data.iloc[0:6, 11:22]
       <th>instant_bookable</th>
       <th>cancellation_policy</th>
       <th>require_guest_profile_picture</th>
+      <th>require_guest_phone_verification</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <th>40281</th>
+      <th>20958</th>
       <td>Real Bed</td>
-      <td>{TV,Internet,"Wireless Internet",Kitchen,Heati...</td>
-      <td>70.0</td>
-      <td>1</td>
-      <td>0.0</td>
-      <td>7</td>
-      <td>20</td>
-      <td>0</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>15230</th>
-      <td>Real Bed</td>
-      <td>{TV,Internet,"Wireless Internet",Kitchen,"Free...</td>
-      <td>22.0</td>
-      <td>1</td>
-      <td>10.0</td>
-      <td>5</td>
-      <td>50</td>
-      <td>0</td>
-      <td>f</td>
-      <td>moderate</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>33497</th>
-      <td>Real Bed</td>
-      <td>{Internet,"Wireless Internet",Kitchen,"Indoor ...</td>
-      <td>37.0</td>
-      <td>1</td>
-      <td>0.0</td>
-      <td>1</td>
-      <td>1125</td>
-      <td>156</td>
-      <td>t</td>
-      <td>strict</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>33749</th>
-      <td>Real Bed</td>
-      <td>{TV,Internet,"Wireless Internet",Kitchen,"Pets...</td>
-      <td>180.0</td>
-      <td>6</td>
-      <td>4.0</td>
-      <td>1</td>
-      <td>1125</td>
-      <td>62</td>
-      <td>f</td>
-      <td>strict</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>12492</th>
-      <td>Real Bed</td>
-      <td>{TV,"Cable TV","Wireless Internet",Kitchen,"Fr...</td>
       <td>100.0</td>
       <td>1</td>
       <td>0.0</td>
-      <td>1</td>
+      <td>3</td>
       <td>1125</td>
       <td>0</td>
       <td>f</td>
       <td>flexible</td>
       <td>f</td>
+      <td>f</td>
     </tr>
     <tr>
-      <th>18103</th>
+      <th>25318</th>
       <td>Real Bed</td>
-      <td>{TV,"Wireless Internet","Pets live on this pro...</td>
-      <td>45.0</td>
-      <td>1</td>
-      <td>20.0</td>
+      <td>140.0</td>
       <td>2</td>
-      <td>14</td>
+      <td>0.0</td>
+      <td>3</td>
+      <td>1125</td>
       <td>89</td>
       <td>f</td>
+      <td>moderate</td>
+      <td>f</td>
+      <td>f</td>
+    </tr>
+    <tr>
+      <th>18207</th>
+      <td>Real Bed</td>
+      <td>179.0</td>
+      <td>1</td>
+      <td>0.0</td>
+      <td>5</td>
+      <td>1125</td>
+      <td>38</td>
+      <td>f</td>
       <td>strict</td>
+      <td>f</td>
+      <td>f</td>
+    </tr>
+    <tr>
+      <th>10547</th>
+      <td>Futon</td>
+      <td>35.0</td>
+      <td>1</td>
+      <td>10.0</td>
+      <td>2</td>
+      <td>1125</td>
+      <td>238</td>
+      <td>f</td>
+      <td>moderate</td>
+      <td>f</td>
+      <td>f</td>
+    </tr>
+    <tr>
+      <th>3826</th>
+      <td>Real Bed</td>
+      <td>25.0</td>
+      <td>1</td>
+      <td>5.0</td>
+      <td>3</td>
+      <td>31</td>
+      <td>89</td>
+      <td>f</td>
+      <td>flexible</td>
+      <td>f</td>
+      <td>f</td>
+    </tr>
+    <tr>
+      <th>43315</th>
+      <td>Real Bed</td>
+      <td>180.0</td>
+      <td>1</td>
+      <td>0.0</td>
+      <td>3</td>
+      <td>1125</td>
+      <td>6</td>
+      <td>t</td>
+      <td>strict</td>
+      <td>f</td>
       <td>f</td>
     </tr>
   </tbody>
 </table>
-</div>
 
 
+## One Hot Encoding for Categorical Features <a name="one_hot"></a>
 
-I did not realised before that the `amenities` feature was here. I decide to delete this one because again, it would necessitate some Natural Language Processing.
-
-
-```python
-# Delete amenities feature (too complicated to process for the moment)
-data.drop(['amenities'], axis=1, inplace=True)
-```
-
-
-```python
-print(data.shape)
-```
-
-    (46976, 22)
-    
-
-## One Hot Encoding for categorical variables 
-
-Categorical variables need to be One Hot Encoded in order to be converted in several numerical features and used in a Machine Learning model. This method is very well explained in this Kaggle notebook: https://www.kaggle.com/dansbecker/using-categorical-data-with-one-hot-encoding.
+Categorical variables need to be One Hot Encoded in order to be converted into several numerical features and used in a Machine Learning model. This method is very well explained in this Kaggle notebook: https://www.kaggle.com/dansbecker/using-categorical-data-with-one-hot-encoding.
 
 
 ```python
@@ -1944,7 +2166,7 @@ print(data.shape)
     (46976, 193)
     
 
-## Split the data: Features / labels and Training set / testing set
+## Data Splitting: Features / labels - Training set / testing set <a name="data_split"></a>
 
 I then split my dataframe into features and labels and training and testing sets.
 
@@ -1959,7 +2181,7 @@ from sklearn.model_selection import train_test_split
 train_X, test_X, train_y, test_y = train_test_split(X, y, random_state = 0)
 ```
 
-## Convert to numpy arrays
+## Numpy Arrays Transformation <a name="numpy_array"></a>
 
 I convert the `train` and `test` dataframe into numpy arrays so that they can be used to train and test the models.
 
@@ -1981,42 +2203,29 @@ train_X.shape, test_X.shape
 
 
     ((35232, 192), (11744, 192))
-
-
-
-
-```python
-%store train_X
-%store train_y
-%store test_X
-%store test_y
-```
-
-    Stored 'train_X' (ndarray)
-    Stored 'train_y' (ndarray)
-    Stored 'test_X' (ndarray)
-    Stored 'test_y' (ndarray)
     
 
-Now that the data preprocessing is over, I can start the second part of this work: apply different Machine Learning models.
-As a reminder, I decided to apply 3 different models:
-* a Random Forest, with the RandomForestRegressor from the Scikit-learn library
-* a Gradient Boosting method, with the XGBRegressor from the XGBoost library
-* a Neural Network, with the MLPRegressor from the Scikit-learn library.
+# Modelling <a name="modelling"></a>
 
-Each time, I applied the model with its default hyperparameters and I then tuned the model in order to get the best hyperparameters I could.
+Now that the data preprocessing is over, I can start the second part of this work: applying different Machine Learning models.
+As a reminder, I decided to apply 3 different models:
+* **Random Forest**, with the RandomForestRegressor from the Scikit-learn library
+* **Gradient Boosting** method, with the XGBRegressor from the XGBoost library
+* **Neural Network**, with the MLPRegressor from the Scikit-learn library.
+
+Each time, I applied the model with its default hyperparameters and I then tuned the model in order to get the best hyperparameters I could. The metrics I use to evaluate the models is the **median absolute error** due to the presence of extreme outliers and skewness in the data set.
 
 Let's start with the Random Forest model.
 
-# Apply Random Forest regressor
+## Application of the Random Forest Regressor <a name="RF"></a>
 
 As I said, the first algorithm I apply is a Random Forest regressor with the default hyperparameters.
 
-## Without hyperparameter tuning
+### With default hyperparameters <a name="RF_def"></a>
 
-### Create the pipeline and fit the model
+#### Creation of the pipeline
 
-I create a pipeline that first impute the missing values, then scale the data and finally apply the model. I then fit this pipeline to the training set.
+I create a pipeline that first imputes the missing values, then scales the data and finally applies the model. I then fit this pipeline to the training set.
 
 
 ```python
@@ -2032,65 +2241,45 @@ my_pipeline_RF = make_pipeline(Imputer(), StandardScaler(),
 # Fit the model
 my_pipeline_RF.fit(train_X, train_y)
 ```
-    
 
-### Evaluate the model
 
-I evaluate this model on my testing set. I uses 3 different metrics, which are all interpretable in dollars: 
-* the mean absolute error
-* the median absolute error
-* the root-mean-square error
+#### Evaluation of the model
 
-But I decide to evaluate my model with the median absolute error due to the presence of extreme outliers and skewness in the data set.
+I evaluate this model on my testing set. As I mentioned above, I use the median absolute error to measure the performance of my model, which is interpretable in dollars. I also decide to have a look at the root-mean-square error (RMSE).
+
+I create the `evaluate_model` function that will evaluate the performance of my different models through this post.
 
 
 ```python
-# Predict prices of the test data
-predictions = my_pipeline_RF.predict(test_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MAE
-print("Mean Absolute Error test: " + str(round(mean_absolute_error(predictions, test_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions, test_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE = round(sqrt(mean_squared_error(predictions, test_y)), 2)
-# Write the RMSE
-print("RMSE test: " + str(RMSE)) 
+def evaluate_model(model, predict_set, evaluate_set):
+    predictions = model.predict(predict_set)
+    from sklearn.metrics import median_absolute_error
+    print("Median Absolute Error: " + str(round(median_absolute_error(predictions, evaluate_set), 2))) 
+    from sklearn.metrics import mean_squared_error
+    from math import sqrt
+    RMSE = round(sqrt(mean_squared_error(predictions, evaluate_set)), 2)
+    print("RMSE: " + str(RMSE)) 
 ```
 
-    Mean Absolute Error test: 27.09
-    Median Absolute Error test: 14.0
-    RMSE test: 66.07
+
+```python
+result_RF_test = evaluate_model(my_pipeline_RF, test_X, test_y)
+```
+
+    Median Absolute Error: 14.3
+    RMSE: 69.39
     
 
 I decide to evaluate the model on the training set too, to be sure that I have avoided overfitting.
 
 
 ```python
-# Predict prices of the train data
-predictions_train = my_pipeline_RF.predict(train_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MEA
-print("Mean Absolute Error train: " + str(round(mean_absolute_error(predictions_train, train_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error train: " + str(round(median_absolute_error(predictions_train, train_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE_train = round(sqrt(mean_squared_error(predictions_train, train_y)), 2)
-# Write the RMSE
-print("RMSE train: " + str(RMSE_train)) 
+result_RF_train = evaluate_model(my_pipeline_RF, train_X, train_y)
+result_RF_train
 ```
 
-    Mean Absolute Error train: 11.16
-    Median Absolute Error train: 5.1
-    RMSE train: 37.08
+    Median Absolute Error: 5.0
+    RMSE: 40.78
     
 
 These first results are quite good. To be sure that I have made a good feature selection I decide to have a look at the feature importances which is available with the Random Forest regressor.
@@ -2109,54 +2298,27 @@ feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse 
 ```
 
     Variable: bedrooms             Importance: 0.18
-    Variable: maximum_nights       Importance: 0.11
-    Variable: bathrooms            Importance: 0.1
-    Variable: availability_365     Importance: 0.1
-    Variable: latitude             Importance: 0.07
-    Variable: accommodates         Importance: 0.07
-    Variable: longitude            Importance: 0.04
+    Variable: bathrooms            Importance: 0.14
+    Variable: availability_365     Importance: 0.11
+    Variable: maximum_nights       Importance: 0.07
+    Variable: latitude             Importance: 0.06
+    Variable: neighbourhood_cleansed_Westminster Importance: 0.05
+    Variable: accommodates         Importance: 0.04
     Variable: property_type_Other  Importance: 0.04
-    Variable: host_total_listings_count Importance: 0.03
-    Variable: beds                 Importance: 0.03
-    Variable: zipcode_SW1P         Importance: 0.03
+    Variable: longitude            Importance: 0.03
+    Variable: minimum_nights       Importance: 0.03
+    Variable: zipcode_NW1          Importance: 0.03
     Variable: room_type_Entire home/apt Importance: 0.03
-    Variable: minimum_nights       Importance: 0.02
+    Variable: host_total_listings_count Importance: 0.02
+    Variable: zipcode_SW1P         Importance: 0.02
     Variable: zipcode_SW1W         Importance: 0.02
+    Variable: beds                 Importance: 0.01
+    Variable: guests_included      Importance: 0.01
     Variable: extra_people         Importance: 0.01
+    Variable: neighbourhood_cleansed_Islington Importance: 0.01
     Variable: neighbourhood_cleansed_Kensington and Chelsea Importance: 0.01
     Variable: zipcode_E8           Importance: 0.01
-    Variable: zipcode_NW1          Importance: 0.01
     Variable: zipcode_SW3          Importance: 0.01
-    Variable: zipcode_W2           Importance: 0.01
-    Variable: guests_included      Importance: 0.0
-    Variable: neighbourhood_cleansed_Barnet Importance: 0.0
-    
-
-
-
-
-    [None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None,
-     None]
 
 
 
@@ -2171,10 +2333,10 @@ cumulative_importances = sum(sorted_importances)
 print(cumulative_importances)
 ```
 
-    0.9300000000000004
+    0.9400000000000004
     
 
-# Hyperparameter tuning
+### Hyperparameters tuning <a name="RF_tuned"></a>
 
 I had some good results with the default hyperparameters of the Random Forest regressor. But I can improve the results with some hyperparameter tuning. There are two main methods available for this:
 * Random search
@@ -2240,9 +2402,9 @@ pprint(my_pipeline_RF.get_params())
                oob_score=False, random_state=42, verbose=0, warm_start=False))]}
     
 
-## Randomized Search with Cross Validation
+#### Randomized Search with Cross Validation <a name="RF_random_search"></a>
 
-### Create the random grid
+##### Creation of the parameter grid
 
 
 ```python
@@ -2292,7 +2454,7 @@ pprint(random_grid)
                                              1000]}
     
 
-### Search for best hyperparameters
+##### Search for best hyperparameters
 
 
 ```python
@@ -2308,7 +2470,7 @@ rf_random = RandomizedSearchCV(estimator = my_pipeline_RF,
                                random_state = 42, n_jobs = -1, 
                                scoring = 'neg_median_absolute_error')
 
-```
+```    
 
 
 ```python
@@ -2333,9 +2495,9 @@ rf_random.best_params_
 
 
 
-## Grid Search with Cross Validation
+#### Grid Search with Cross Validation <a name="RF_grid_search"></a>
 
-### Create the grid
+##### Creation of the parameter grid
 
 
 ```python
@@ -2352,7 +2514,7 @@ param_grid = {
 ```
     
 
-### Search for best hyperparameters
+##### Search for best hyperparameters
 
 
 ```python
@@ -2361,9 +2523,8 @@ grid_search = GridSearchCV(estimator = my_pipeline_RF,
                            param_grid = param_grid, 
                            cv = 3, n_jobs = -1, verbose = 2, 
                            scoring = 'neg_median_absolute_error')
-                           
 ```
-
+    
 
 
 ```python
@@ -2371,7 +2532,6 @@ grid_search = GridSearchCV(estimator = my_pipeline_RF,
 grid_search.fit(train_X, train_y)
 ```
 
-    
 
 ```python
 grid_search.best_params_
@@ -2412,40 +2572,40 @@ my_pipeline_RF_grid.fit(train_X, train_y)
 
 
 
-### Evaluate the model
+##### Evaluation of the model
 
 Now let's evaluate the tuned model.
 
 
 ```python
-# Predict prices of the test data
-predictions_grid = my_pipeline_RF_grid.predict(test_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MEA
-print("Mean Absolute Error test: " + str(round(mean_absolute_error(predictions_grid, test_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions_grid, test_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE = round(sqrt(mean_squared_error(predictions_grid, test_y)), 2)
-# Write the RMSE
-print("RMSE test: " + str(RMSE)) 
+result_RF_tuned_test = evaluate_model(my_pipeline_RF_grid, test_X, test_y)
+result_RF_tuned_test
 ```
 
-    Mean Absolute Error test: 25.34
-    Median Absolute Error test: 13.35
-    RMSE test: 59.74
+    Median Absolute Error: 13.58
+    RMSE: 79.18
     
 
-I get better results with the tuned model than with default hyperparameters, but the improvement is not amazing. Maybe I will have a better precision if I use another model.
+
+```python
+result_RF_test = evaluate_model(my_pipeline_RF, test_X, test_y)
+```
+
+    Median Absolute Error: 14.3
+    RMSE: 69.39
+    
+
+I get better results with the tuned model than with default hyperparameters, but the improvement of the median absolute error is not amazing. Maybe I will have a better precision if I use another model.
 
 
-# Apply XGBRegressor
+
+## Application of the Gradient Boosting Regressor <a name="XGB"></a>
 
 Let's try with the XGBoost gradient boosting model. This model often produces really good results in Kaggle competitions. The first step is to use it with the default hyperparameters.
+
+### With default hyperparameters <a name="XGB_def"></a>
+
+#### Creation of the pipeline
 
 
 ```python
@@ -2464,57 +2624,28 @@ my_pipeline_XGB.fit(train_X, train_y)
 ```
     
 
+#### Evaluation of the model
 
 ```python
-# Predict prices of the test data
-predictions = my_pipeline_XGB.predict(test_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MAE
-print("Mean Absolute Error test: " + str(round(mean_absolute_error(predictions, test_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions, test_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE = round(sqrt(mean_squared_error(predictions, test_y)), 2)
-# Write the RMSE
-print("RMSE test: " + str(RMSE)) 
+result_XGB_test = evaluate_model(my_pipeline_XGB, test_X, test_y)
 ```
 
-    Mean Absolute Error test: 27.41
-    Median Absolute Error test: 16.15
-    RMSE test: 57.81
+    Median Absolute Error: 15.87
+    RMSE: 57.24
     
 
 
 ```python
-# Predict prices of the train data
-predictions_train = my_pipeline_XGB.predict(train_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MEA
-print("Mean Absolute Error train: " + str(round(mean_absolute_error(predictions_train, train_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error train: " + str(round(median_absolute_error(predictions_train, train_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE_train = round(sqrt(mean_squared_error(predictions_train, train_y)), 2)
-# Write the RMSE
-print("RMSE train: " + str(RMSE_train)) 
+result_XGB_train = evaluate_model(my_pipeline_XGB, train_X, train_y)
 ```
 
-    Mean Absolute Error train: 27.54
-    Median Absolute Error train: 16.14
-    RMSE train: 71.46
+    Median Absolute Error: 16.11
+    RMSE: 71.87
     
 
 For the moment, the tuned and even not tuned Random Forest models give better results. I want to see if hyperparameter tuning will make this model better than the Random Forest one.
 
-# Hyperparameter tuning
+### Hyperparameters tuning
 
 
 ```python
@@ -2577,7 +2708,9 @@ pprint(my_pipeline_XGB.get_params())
      'xgbregressor__subsample': 1}
     
 
-## Grid search
+#### Grid Search with Cross Validation <a name="XGB_grid_search"></a>
+
+##### Creation of the parameter grid
 
 
 ```python
@@ -2587,8 +2720,9 @@ param_grid = {'xgbregressor__learning_rate': [0.1, 0.05],
               'xgbregressor__max_depth': [5, 7, 9],
               'xgbregressor__n_estimators': [100, 500, 900]}
 ```
-
     
+
+##### Search for best hyperparameters
 
 
 ```python
@@ -2606,8 +2740,6 @@ grid_search = GridSearchCV(estimator = my_pipeline_XGB,
 # Fit the grid search to the data
 grid_search.fit(train_X, train_y)
 ```
-
-
 
 
 ```python
@@ -2643,65 +2775,38 @@ my_pipeline_XGB_grid.fit(train_X, train_y)
 ```
     
 
-## Evaluate the tuned model
+##### Evaluation of the model
 
 
 ```python
-# Predict prices of test data
-predictions_grid = my_pipeline_XGB_grid.predict(test_X)
-%store predictions_grid
-
-from sklearn.metrics import mean_absolute_error
-# Write the MAE
-print("Mean Absolute Error : " + str(round(mean_absolute_error(predictions_grid, test_y), 2)))
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions_grid, test_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE = round(sqrt(mean_squared_error(predictions_grid, test_y)), 2)
-# Write the RMSE
-print("RMSE test: " + str(RMSE)) 
+result_XGB_tuned_test = evaluate_model(my_pipeline_XGB_grid, test_X, test_y)
 ```
 
-    Stored 'predictions_grid' (ndarray)
-    Mean Absolute Error : 25.37
-    Median Absolute Error test: 13.53
-    RMSE test: 78.18
+    Median Absolute Error: 13.48
+    RMSE: 95.86
     
 
 
 ```python
-# Predict prices of the train data
-predictions_train_grid = my_pipeline_XGB_grid.predict(train_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MEA
-print("Mean Absolute Error train: " + str(round(mean_absolute_error(predictions_train_grid, train_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error train: " + str(round(median_absolute_error(predictions_train_grid, train_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE_train = round(sqrt(mean_squared_error(predictions_train_grid, train_y)), 2)
-# Write the RMSE
-print("RMSE train: " + str(RMSE_train)) 
+result_XGB_tuned_train = evaluate_model(my_pipeline_XGB_grid, train_X, train_y)
 ```
 
-    Mean Absolute Error train: 13.48
-    Median Absolute Error train: 8.94
-    RMSE train: 21.06
+    Median Absolute Error: 8.69
+    RMSE: 20.15
     
 
-The tuned XGBoost model gives better results than the not tuned Random Forest model and gives almost the same results than the tuned Random Forest model. But for the moment, the tuned Random Forest model is the best one.
+The tuned XGBoost model gives better results than the not tuned one, for both the testing and training sets. It also gives almost the same results as the tuned Random Forest model (MAE: 13.58).
 
 
-# Apply MLP regressor
+
+## Application of the Multi Layer Perceptron Regressor <a name="MLP"></a>
 
 
-Now let's try a Neural Network, or to be more precise, a multilayer perceptron which is a class of Neural Network. I apply this regressor with default hyperparameters except from the maximum numer of iteration in order to let him run until the end.
+Now let's try a Neural Network, or to be more precise, a multilayer perceptron which is a class of Neural Network. I apply this regressor with default hyperparameters except from the maximum numer of iteration in order to let it run until the end.
+
+### With default hyperparameters <a name="MLP_def"></a>
+
+#### Creation of the pipeline
 
 
 ```python
@@ -2720,71 +2825,30 @@ my_pipeline_NN = make_pipeline(Imputer(), StandardScaler(),
 my_pipeline_NN.fit(train_X, train_y)
 ```
 
-  
 
 
-
-## Evaluate our model
-
+#### Evaluation of the model
 
 ```python
-# Predict prices of the test data
-predictions = my_pipeline_NN.predict(test_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MAE
-print("Mean Absolute Error test: " + str(round(mean_absolute_error(predictions, test_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions, test_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE = round(sqrt(mean_squared_error(predictions, test_y)), 2)
-# Write the RMSE
-print("RMSE test: " + str(RMSE)) 
-
-%store my_pipeline_NN
-%store predictions
+result_NN_test = evaluate_model(my_pipeline_NN, test_X, test_y)
 ```
 
-    Mean Absolute Error test: 33.04
-    Median Absolute Error test: 19.49
-    RMSE test: 64.27
-    Stored 'my_pipeline_NN' (Pipeline)
-    Stored 'predictions' (ndarray)
+    Median Absolute Error: 19.31
+    RMSE: 68.52
     
 
 
 ```python
-# Predict prices of the train data
-predictions_train = my_pipeline_NN.predict(train_X)
-
-from sklearn.metrics import mean_absolute_error
-# Write the MEA
-print("Mean Absolute Error train: " + str(round(mean_absolute_error(predictions_train, train_y), 2))) 
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions_train, train_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE_train = round(sqrt(mean_squared_error(predictions_train, train_y)), 2)
-# Write the RMSE
-print("RMSE train: " + str(RMSE_train)) 
-
-%store predictions_train
+result_NN_train = evaluate_model(my_pipeline_NN, train_X, train_y)
 ```
 
-    Mean Absolute Error train: 27.2
-    Median Absolute Error test: 16.61
-    RMSE train: 76.38
-    Stored 'predictions_train' (ndarray)
+    Median Absolute Error: 16.34
+    RMSE: 76.49
     
 
-The results are not very good compared to the two previous models. Let's try to tune this neural network, maybe the default parameters are very bad for the data.
+The results are not very good compared to the two previous models. Let's try to tune this neural network, maybe the default parameters are very not good for this data.
 
-# Improve hyperparameters
+### Hyperparameters tuning <a name="MLP_tuned"></a>
 
 
 ```python
@@ -2850,7 +2914,9 @@ my_pipeline_NN.get_params()
 
 I did a random search before the grid search but I decided not to include it in the notebook to make it more concise and clearer.
 
-## Grid search - Activation: logistic, tanh
+#### Grid Search with Cross Validation <a name="MLP_grid_search"></a>
+
+##### Creation of the parameter grid
 
 
 ```python
@@ -2860,11 +2926,13 @@ param_grid = {
     'mlpregressor__activation': ['logistic', 'tanh'],
     'mlpregressor__solver': ['sgd', 'adam'],
     'mlpregressor__early_stopping': [True, False],
-    'mlpregressor__hidden_layer_sizes': [(50,), (100,)],
+    'mlpregressor__hidden_layer_sizes': [(100,), (100, 50), (100, 100), (100, 100, 100)],
     'mlpregressor__learning_rate_init': [0.001, 0.0001],
 }
 ```
     
+
+##### Search for best hyperparameters
 
 
 ```python
@@ -2892,11 +2960,11 @@ grid_search.best_params_
 
 
 
-    {'mlpregressor__activation': 'tanh',
-     'mlpregressor__early_stopping': True,
-     'mlpregressor__hidden_layer_sizes': (100,),
+    {'mlpregressor__activation': 'logistic',
+     'mlpregressor__early_stopping': False,
+     'mlpregressor__hidden_layer_sizes': (100, 100, 100),
      'mlpregressor__learning_rate_init': 0.0001,
-     'mlpregressor__solver': 'adam'}
+     'mlpregressor__solver': 'sgd'}
 
 
 
@@ -2911,11 +2979,11 @@ from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_regressi
 
 # Create the pipeline: imputation + MLP regressor
 my_pipeline_NN_grid = make_pipeline(Imputer(), StandardScaler(),
-                                    MLPRegressor(hidden_layer_sizes = (100,),
-                                                 activation = 'tanh',
-                                                 early_stopping = True,
+                                    MLPRegressor(hidden_layer_sizes = (100, 100, 100),
+                                                 activation = 'logistic',
+                                                 early_stopping = False,
                                                  learning_rate_init = 0.0001,
-                                                 solver = 'adam',
+                                                 solver = 'sgd',
                                                  max_iter = 500,
                                                  random_state = 42)) 
 
@@ -2925,41 +2993,37 @@ my_pipeline_NN_grid.fit(train_X, train_y)
 
 
 
+##### Evaluation of the model
+
 ```python
-# Accuracy on test data
-predictions_grid = my_pipeline_NN_grid.predict(test_X)
-%store predictions_grid
-
-from sklearn.metrics import mean_absolute_error
-# Write the MAE
-print("Mean Absolute Error : " + str(mean_absolute_error(predictions_grid, test_y)))
-
-from sklearn.metrics import median_absolute_error
-print("Median Absolute Error test: " + str(round(median_absolute_error(predictions_grid, test_y), 2))) 
-
-from sklearn.metrics import mean_squared_error
-from math import sqrt
-RMSE = round(sqrt(mean_squared_error(predictions_grid, test_y)), 2)
-# Write the RMSE
-print("RMSE test: " + str(RMSE)) 
+result_NN_tuned_test = evaluate_model(my_pipeline_NN_grid, test_X, test_y)
 ```
 
-    Stored 'predictions_grid' (ndarray)
-    Mean Absolute Error : 28.002134513940412
-    Median Absolute Error test: 16.01
-    RMSE test: 72.02
+    Median Absolute Error: 14.79
+    RMSE: 71.08
     
 
-The tuned Neural Network is much better than the one with default hyperparameters. However it is still much less precise than the first two models.
 
-In conclusion, here are the results of the different models I applied:
+```python
+result_NN_test = evaluate_model(my_pipeline_NN, test_X, test_y)
+```
+
+    Median Absolute Error: 19.31
+    RMSE: 68.52
+    
+
+The tuned Neural Network is much better than the one with default hyperparameters. However, it is still much less precise than the first two models.
+
+## Visualision of the models' performance <a name="conclusion"></a>
+
+In conclusion, here are the performance of the different models I applied:
 
 
 ```python
 # Graph x and y axis values
 import numpy as np
 labels = np.array(['RF','Tuned RF','XGB', 'Tuned XGB', 'MLP', 'Tuned MLP'])
-error_val = np.array([14.0, 13.35, 16.15, 13.53, 19.49, 16.01])
+error_val = np.array([14.3, 13.58, 15.87, 13.48, 19.31, 14.79])
 
 # Arrange bars
 pos = np.arange(error_val.shape[0])
@@ -2978,4 +3042,7 @@ plt.show()
 ```
 
 
-![png](plots/output_22_0.png)
+![png](plots/output_31_0.png)
+
+
+The **tuned Random Forest and XGBoost gave the best results on the testing set**. Surprisingly, the **Multi Layer Perceptron with default parameters gave me the smallest Median Absolute errors**, and the tuned one did not even give better results than the default Random Forest. This is unusual, maybe the Multi Layer Perceptron needs more data to perform better, or it might need more tuning on important hyperparameters such as the `hidden_layer_sizes`.
