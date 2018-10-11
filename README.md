@@ -1,56 +1,8 @@
-# Table of contents
-1. [Introduction](#introduction)
-2. [Data Preprocessing](#preprocessing)
-    1. [Data Import](#import_data)
-    2. [Feature Selection](#selection)
-        1. [Selection on Numerical Features](#selection_num)
-        2. [Feature Emptiness Evaluation](#selection_empty)
-        3. [Selection on Categorical Features](#selection_cat)
-        4. [Multicollinearity Evaluation](#selection_multicol)
-    3. [Manipulation on Price Columns](#price_col)
-    4. [One Hot Encoding for Categorical Features](#one_hot)
-    5. [Data Splitting: Features / labels - Training set / testing set](#data_split)
-    6. [Numpy Arrays Transformation](#numpy_array)
-3. [Modelling](#modelling)
-    1. [Application of the Random Forest Regressor](#RF)
-        1. [With default hyperparameters](#RF_def)
-        2. [Hyperparameters tuning](#RF_tuned)
-            1. [Randomized Search with Cross Validation](#RF_random_search)
-            2. [Grid Search with Cross Validation](#RF_grid_search)
-    2. [Application of the Gradient Boosting Regressor](#XGB)
-        1. [With default hyperparameters](#XGB_def)
-        2. [Hyperparameters tuning](#XGB_tuned)
-            1. [Grid Search with Cross Validation](#XGB_grid_search)
-    3. [Application of the Multi Layer Perceptron Regressor](#MLP)
-        1. [With default hyperparameters](#MLP_def)
-        2. [Hyperparameters tuning](#MLP_tuned)
-            1. [Grid Search with Cross Validation](#MLP_grid_search)
-4. [Visualision of the models' performance](#conclusion)
-    
 
-# Introduction <a name="introduction"></a>
-This post aims at modelling the **prices of Airbnb appartments in London**. In other words, the aim is to build our own price suggestion model. The data used in this post has been downloaded from the http://insideairbnb.com/ website and was collected in April 2018. This work is inspired from the [`Airbnb price prediction model built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi`](https://d1no007.github.io/OptiBnB/).
+# Modeling Airbnb prices
+In this post we're going to model the prices of Airbnb appartments in London. In other words, the aim is to build our own price suggestion model. We will be using data from http://insideairbnb.com/ which we collected in April 2018. This work is inspired from the [Airbnb price prediction model](https://d1no007.github.io/OptiBnB/) built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi.
 
-This post contains two main parts:
-* the **data preprocessing**, which aims at cleaning the data and selecting the most useful features for the models.
-* the **modelling** with 3 different algorithms: Random Forests, XGBoost and a Neural Network.
-
-The Python 3.5 libraries used are the following:
-* pandas
-* matplotlib
-* numpy
-* collections
-* sklearn
-* xgboost
-* random
-* math
-* pprint
-
-Let's start with the first part, data preprocessing.
-
-
-# Data Preprocessing <a name="preprocessing"></a>
-
+## Data Preprocessing
 The first thing to do is to set the seed in order to be able to reproduce the results.
 
 
@@ -59,21 +11,19 @@ import random
 random.seed(42)
 ```
 
-## Data Import <a name="import_data"></a>
-
-Then I import the listings gathered in the csv file.
+Then we import the listings gathered in the csv file.
 
 
 ```python
-# Import data
-
 import pandas as pd
 
-main_file_path = 'listings.csv' 
-data = pd.read_csv(main_file_path, low_memory=False)
-
-print(data.columns)
+listings_file_path = 'listings.csv.gz' 
+listings = pd.read_csv(listings_file_path, compression="gzip", low_memory=False)
+listings.columns
 ```
+
+
+
 
     Index(['id', 'listing_url', 'scrape_id', 'last_scraped', 'name', 'summary',
            'space', 'description', 'experiences_offered', 'neighborhood_overview',
@@ -104,11 +54,13 @@ print(data.columns)
            'require_guest_phone_verification', 'calculated_host_listings_count',
            'reviews_per_month'],
           dtype='object')
-    
 
-As this file has 95 columns, I decide to have a look at the features names to delete the ones that directly seem useless. This is my first feature selection step.
 
-## Feature Selection <a name="selection"></a>
+
+The data has 95 columns or features. Our first step is to perform feature selection to reduce this number.
+
+### Feature selection
+For some of the features it is already obvious that they won't be of any use just by looking at their name, so we remove these.
 
 
 ```python
@@ -123,21 +75,19 @@ useless = ['id', 'listing_url', 'scrape_id', 'last_scraped', 'name', 'summary',
        'host_verifications', 'host_has_profile_pic', 'host_identity_verified',
        'city', 'state', 'market', 'smart_location', 'country_code', 'country',
        'is_location_exact', 'weekly_price', 'monthly_price']
-data.drop(useless, axis=1, inplace=True)
+listings.drop(useless, axis=1, inplace=True)
 ```
 
-I also decide to delete the following features as they are only available for old Airbnb appartments. Let's imagine that I am new on Airbnb and I want to rent my appartment. At that time, I won't have any review score for my appartment. These ones are called leaky predictors, and should not be part of my model.
+We can also delete the following features as they are only available for old Airbnb appartments. Let's imagine that we are new on Airbnb and we want to rent an appartment. At that time, we won't have any review score for a appartment so we should remove any features related to this.
 
 
 ```python
-# Drop reviews features as they are not available for new apartments in Airbnb
-data.drop(list(data.filter(regex = 'review')), axis = 1, inplace = True)
+listings.drop(listings.filter(regex = 'review').columns, axis = 1, inplace = True)
+listings.columns
 ```
 
 
-```python
-print(data.columns)
-```
+
 
     Index(['host_total_listings_count', 'street', 'neighbourhood',
            'neighbourhood_cleansed', 'neighbourhood_group_cleansed', 'zipcode',
@@ -151,715 +101,111 @@ print(data.columns)
            'cancellation_policy', 'require_guest_profile_picture',
            'require_guest_phone_verification', 'calculated_host_listings_count'],
           dtype='object')
-    
-
-### Selection on Numerical Features <a name="selection_num"></a>
-
-Let's have a look at the numerical variables. Using the `describe` function, we are able to spot the features which have missing values.
-
-
-```python
-data.describe()
-```
-
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>host_total_listings_count</th>
-      <th>neighbourhood_group_cleansed</th>
-      <th>latitude</th>
-      <th>longitude</th>
-      <th>accommodates</th>
-      <th>bathrooms</th>
-      <th>bedrooms</th>
-      <th>beds</th>
-      <th>square_feet</th>
-      <th>guests_included</th>
-      <th>minimum_nights</th>
-      <th>maximum_nights</th>
-      <th>has_availability</th>
-      <th>availability_30</th>
-      <th>availability_60</th>
-      <th>availability_90</th>
-      <th>availability_365</th>
-      <th>license</th>
-      <th>calculated_host_listings_count</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>count</th>
-      <td>53895.000000</td>
-      <td>0.0</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53644.000000</td>
-      <td>53811.000000</td>
-      <td>53731.000000</td>
-      <td>582.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>5.390400e+04</td>
-      <td>0.0</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>0.0</td>
-      <td>53904.000000</td>
-    </tr>
-    <tr>
-      <th>mean</th>
-      <td>15.885500</td>
-      <td>NaN</td>
-      <td>51.510425</td>
-      <td>-0.127105</td>
-      <td>3.036676</td>
-      <td>1.262751</td>
-      <td>1.353980</td>
-      <td>1.708027</td>
-      <td>577.508591</td>
-      <td>1.407428</td>
-      <td>3.285229</td>
-      <td>2.683750e+05</td>
-      <td>NaN</td>
-      <td>11.830755</td>
-      <td>25.337674</td>
-      <td>40.514433</td>
-      <td>155.849789</td>
-      <td>NaN</td>
-      <td>14.976106</td>
-    </tr>
-    <tr>
-      <th>std</th>
-      <td>84.700442</td>
-      <td>NaN</td>
-      <td>0.045454</td>
-      <td>0.088346</td>
-      <td>1.907429</td>
-      <td>0.547699</td>
-      <td>0.841912</td>
-      <td>1.201165</td>
-      <td>726.154243</td>
-      <td>1.040308</td>
-      <td>28.536837</td>
-      <td>2.317162e+07</td>
-      <td>NaN</td>
-      <td>12.178077</td>
-      <td>24.064923</td>
-      <td>36.383218</td>
-      <td>144.032928</td>
-      <td>NaN</td>
-      <td>81.750305</td>
-    </tr>
-    <tr>
-      <th>min</th>
-      <td>0.000000</td>
-      <td>NaN</td>
-      <td>51.292892</td>
-      <td>-0.501305</td>
-      <td>1.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000e+00</td>
-      <td>NaN</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>NaN</td>
-      <td>1.000000</td>
-    </tr>
-    <tr>
-      <th>25%</th>
-      <td>1.000000</td>
-      <td>NaN</td>
-      <td>51.485099</td>
-      <td>-0.187191</td>
-      <td>2.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>108.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>6.000000e+01</td>
-      <td>NaN</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>9.000000</td>
-      <td>NaN</td>
-      <td>1.000000</td>
-    </tr>
-    <tr>
-      <th>50%</th>
-      <td>1.000000</td>
-      <td>NaN</td>
-      <td>51.514730</td>
-      <td>-0.122403</td>
-      <td>2.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>484.000000</td>
-      <td>1.000000</td>
-      <td>2.000000</td>
-      <td>1.125000e+03</td>
-      <td>NaN</td>
-      <td>8.000000</td>
-      <td>20.000000</td>
-      <td>36.000000</td>
-      <td>92.000000</td>
-      <td>NaN</td>
-      <td>1.000000</td>
-    </tr>
-    <tr>
-      <th>75%</th>
-      <td>3.000000</td>
-      <td>NaN</td>
-      <td>51.538943</td>
-      <td>-0.069183</td>
-      <td>4.000000</td>
-      <td>1.500000</td>
-      <td>2.000000</td>
-      <td>2.000000</td>
-      <td>819.500000</td>
-      <td>1.000000</td>
-      <td>3.000000</td>
-      <td>1.125000e+03</td>
-      <td>NaN</td>
-      <td>26.000000</td>
-      <td>53.000000</td>
-      <td>81.000000</td>
-      <td>321.000000</td>
-      <td>NaN</td>
-      <td>3.000000</td>
-    </tr>
-    <tr>
-      <th>max</th>
-      <td>735.000000</td>
-      <td>NaN</td>
-      <td>51.683101</td>
-      <td>0.317523</td>
-      <td>16.000000</td>
-      <td>8.000000</td>
-      <td>10.000000</td>
-      <td>16.000000</td>
-      <td>10710.000000</td>
-      <td>16.000000</td>
-      <td>5000.000000</td>
-      <td>2.147484e+09</td>
-      <td>NaN</td>
-      <td>30.000000</td>
-      <td>60.000000</td>
-      <td>90.000000</td>
-      <td>365.000000</td>
-      <td>NaN</td>
-      <td>711.000000</td>
-    </tr>
-  </tbody>
-</table>
 
 
 
-As we can see, the features `neighbourhood_group_cleansed`, `license` and `has_availability` only have missing values. So I decide to delete them. The feature `square_feet` only has 600 observations which are not missing values, this is not enought as the data contains about 54000 rows. So I also delete this variable.
-
-
-```python
-count_data = data.describe().loc['count', ]<600 
-count_data
-```
-
-
-
-
-    host_total_listings_count         False
-    neighbourhood_group_cleansed       True
-    latitude                          False
-    longitude                         False
-    accommodates                      False
-    bathrooms                         False
-    bedrooms                          False
-    beds                              False
-    square_feet                        True
-    guests_included                   False
-    minimum_nights                    False
-    maximum_nights                    False
-    has_availability                   True
-    availability_30                   False
-    availability_60                   False
-    availability_90                   False
-    availability_365                  False
-    license                            True
-    calculated_host_listings_count    False
-    Name: count, dtype: bool
-
-
-
-
-```python
-# Drop count < 600 (neighbourhood_group_cleansed, square_feet, has_availability, license)
-for i in range(len(count_data)):
-        if count_data[i]:
-            data.drop(count_data.index[i], axis=1, inplace=True)
-    
-```
-
-
-```python
-data.describe()
-```
-
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>host_total_listings_count</th>
-      <th>latitude</th>
-      <th>longitude</th>
-      <th>accommodates</th>
-      <th>bathrooms</th>
-      <th>bedrooms</th>
-      <th>beds</th>
-      <th>guests_included</th>
-      <th>minimum_nights</th>
-      <th>maximum_nights</th>
-      <th>availability_30</th>
-      <th>availability_60</th>
-      <th>availability_90</th>
-      <th>availability_365</th>
-      <th>calculated_host_listings_count</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>count</th>
-      <td>53895.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53644.000000</td>
-      <td>53811.000000</td>
-      <td>53731.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>5.390400e+04</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-      <td>53904.000000</td>
-    </tr>
-    <tr>
-      <th>mean</th>
-      <td>15.885500</td>
-      <td>51.510425</td>
-      <td>-0.127105</td>
-      <td>3.036676</td>
-      <td>1.262751</td>
-      <td>1.353980</td>
-      <td>1.708027</td>
-      <td>1.407428</td>
-      <td>3.285229</td>
-      <td>2.683750e+05</td>
-      <td>11.830755</td>
-      <td>25.337674</td>
-      <td>40.514433</td>
-      <td>155.849789</td>
-      <td>14.976106</td>
-    </tr>
-    <tr>
-      <th>std</th>
-      <td>84.700442</td>
-      <td>0.045454</td>
-      <td>0.088346</td>
-      <td>1.907429</td>
-      <td>0.547699</td>
-      <td>0.841912</td>
-      <td>1.201165</td>
-      <td>1.040308</td>
-      <td>28.536837</td>
-      <td>2.317162e+07</td>
-      <td>12.178077</td>
-      <td>24.064923</td>
-      <td>36.383218</td>
-      <td>144.032928</td>
-      <td>81.750305</td>
-    </tr>
-    <tr>
-      <th>min</th>
-      <td>0.000000</td>
-      <td>51.292892</td>
-      <td>-0.501305</td>
-      <td>1.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000e+00</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>1.000000</td>
-    </tr>
-    <tr>
-      <th>25%</th>
-      <td>1.000000</td>
-      <td>51.485099</td>
-      <td>-0.187191</td>
-      <td>2.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>6.000000e+01</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>9.000000</td>
-      <td>1.000000</td>
-    </tr>
-    <tr>
-      <th>50%</th>
-      <td>1.000000</td>
-      <td>51.514730</td>
-      <td>-0.122403</td>
-      <td>2.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>1.000000</td>
-      <td>2.000000</td>
-      <td>1.125000e+03</td>
-      <td>8.000000</td>
-      <td>20.000000</td>
-      <td>36.000000</td>
-      <td>92.000000</td>
-      <td>1.000000</td>
-    </tr>
-    <tr>
-      <th>75%</th>
-      <td>3.000000</td>
-      <td>51.538943</td>
-      <td>-0.069183</td>
-      <td>4.000000</td>
-      <td>1.500000</td>
-      <td>2.000000</td>
-      <td>2.000000</td>
-      <td>1.000000</td>
-      <td>3.000000</td>
-      <td>1.125000e+03</td>
-      <td>26.000000</td>
-      <td>53.000000</td>
-      <td>81.000000</td>
-      <td>321.000000</td>
-      <td>3.000000</td>
-    </tr>
-    <tr>
-      <th>max</th>
-      <td>735.000000</td>
-      <td>51.683101</td>
-      <td>0.317523</td>
-      <td>16.000000</td>
-      <td>8.000000</td>
-      <td>10.000000</td>
-      <td>16.000000</td>
-      <td>16.000000</td>
-      <td>5000.000000</td>
-      <td>2.147484e+09</td>
-      <td>30.000000</td>
-      <td>60.000000</td>
-      <td>90.000000</td>
-      <td>365.000000</td>
-      <td>711.000000</td>
-    </tr>
-  </tbody>
-</table>
-
-
-
-### Feature Emptiness Evaluation <a name="selection_empty"></a>
-
-Here, I want to have a look at the feature emptiness for all the variables (numerical and categorical). We use the `percent_empty` function on all the remaining features and plot the result.
+#### Selection on Missing Data 
+Features that have a high number of missing values aren't useful for our model so we should remove them.
 
 
 ```python
 import matplotlib.pyplot as plt
+%matplotlib inline
 
-def percent_empty(df):
-    """This function calculate the percentage and count of missing values for a feature"""
-    bools = df.isnull().tolist()
-    percent_empty = float(bools.count(True)) / float(len(bools))
-    
-    return percent_empty, float(bools.count(True))
-
-# Store emptiness for all features
-emptiness = []
-
-missing_columns = []
-
-# Get emptiness for all features
-for i in range(0, data.shape[1]):
-    p, n = percent_empty(data.iloc[:,i])
-    if n > 0:
-        missing_columns.append(data.columns.values[i])
-    emptiness.append(round((p), 2))
-    
-empty_dict = dict(zip(data.columns.values.tolist(), emptiness))
-
-# Plot emptiness graph
-empty = pd.DataFrame.from_dict(empty_dict, orient = 'index').sort_values(by=0)
-ax = empty.plot(kind = 'bar', color='#E35A5C', figsize = (16, 5))
-ax.set_xlabel('Predictor')
+percentage_missing_data = listings.isnull().sum() / listings.shape[0]
+ax = percentage_missing_data.plot(kind = 'bar', color='#E35A5C', figsize = (16, 5))
+ax.set_xlabel('Feature')
 ax.set_ylabel('Percent Empty / NaN')
 ax.set_title('Feature Emptiness')
-ax.legend_.remove()
-
 plt.show()
 ```
 
 
-![png](plots/output_21_0.png)
+![png](output_10_0.png)
 
 
-As we can see, the `jurisdiction_names` feature is 100% empty, so we delete this one. The `neighbourhood`, `cleaning_fee` and `security_deposit` are more than 40% empty. I think this is too much so I decide to delete these features too. The last feature which has emptiness is `zipcode`, but it shows very few emptiness so I will be able to use this feature in my model using an imputer.
-
-
-```python
-# Drop neighbourhood, cleaning_fee, security_deposit and juridisction_names
-useless = ['neighbourhood', 'cleaning_fee', 'security_deposit', 'jurisdiction_names']
-data.drop(useless, axis=1, inplace=True)
-```
-
-### Selection on Categorical Features <a name="selection_cat"></a>
-
-Let's have a look at the `data` dataframe to see the remaining features.
+As we can see, the features `neighbourhood_group_cleansed`, `square_feet`, `has_availability`, `license` and `jurisdiction_names` mostly have missing values. The features `neighbourhood`, `cleaning_fee` and `security_deposit` are more than 30% empty which is too much in our opinion. The `zipcode` feature also has some missing values but we can either remove these values or impute them within reasonable accuracy. 
 
 
 ```python
-data.head()
+useless = ['neighbourhood', 'neighbourhood_group_cleansed', 'square_feet', 'security_deposit', 'cleaning_fee', 
+           'has_availability', 'license', 'jurisdiction_names']
+listings.drop(useless, axis=1, inplace=True)
 ```
 
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>host_total_listings_count</th>
-      <th>street</th>
-      <th>neighbourhood_cleansed</th>
-      <th>zipcode</th>
-      <th>latitude</th>
-      <th>longitude</th>
-      <th>property_type</th>
-      <th>room_type</th>
-      <th>accommodates</th>
-      <th>bathrooms</th>
-      <th>...</th>
-      <th>availability_60</th>
-      <th>availability_90</th>
-      <th>availability_365</th>
-      <th>calendar_last_scraped</th>
-      <th>requires_license</th>
-      <th>instant_bookable</th>
-      <th>cancellation_policy</th>
-      <th>require_guest_profile_picture</th>
-      <th>require_guest_phone_verification</th>
-      <th>calculated_host_listings_count</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>0</th>
-      <td>1.0</td>
-      <td>A Thames Street, Kingston upon Thames, England...</td>
-      <td>Kingston upon Thames</td>
-      <td>KT1 1PE</td>
-      <td>51.410036</td>
-      <td>-0.306323</td>
-      <td>Apartment</td>
-      <td>Private room</td>
-      <td>1</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>31</td>
-      <td>61</td>
-      <td>61</td>
-      <td>2017-03-05</td>
-      <td>f</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-      <td>f</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>1.0</td>
-      <td>London Road, Kingston upon Thames, Greater Lon...</td>
-      <td>Kingston upon Thames</td>
-      <td>KT2 6QS</td>
-      <td>51.411482</td>
-      <td>-0.290704</td>
-      <td>Apartment</td>
-      <td>Private room</td>
-      <td>2</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>59</td>
-      <td>89</td>
-      <td>364</td>
-      <td>2017-03-04</td>
-      <td>f</td>
-      <td>f</td>
-      <td>moderate</td>
-      <td>f</td>
-      <td>f</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>1.0</td>
-      <td>Kingston Hill, Kingston upon Thames, KT2 7PW, ...</td>
-      <td>Kingston upon Thames</td>
-      <td>KT2 7PW</td>
-      <td>51.415851</td>
-      <td>-0.286496</td>
-      <td>Apartment</td>
-      <td>Private room</td>
-      <td>2</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>2017-03-05</td>
-      <td>f</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-      <td>f</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>1.0</td>
-      <td>Canbury Avenue, Kingston upon Thames, KT2 6JR,...</td>
-      <td>Kingston upon Thames</td>
-      <td>KT2 6JR</td>
-      <td>51.415723</td>
-      <td>-0.292246</td>
-      <td>House</td>
-      <td>Private room</td>
-      <td>2</td>
-      <td>1.5</td>
-      <td>...</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>2017-03-05</td>
-      <td>f</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-      <td>f</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>1.0</td>
-      <td>Kingston Road, New Malden, England KT3 3RX, Un...</td>
-      <td>Kingston upon Thames</td>
-      <td>KT3 3RX</td>
-      <td>51.404285</td>
-      <td>-0.275426</td>
-      <td>House</td>
-      <td>Private room</td>
-      <td>1</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>59</td>
-      <td>89</td>
-      <td>179</td>
-      <td>2017-03-05</td>
-      <td>f</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-      <td>f</td>
-      <td>1</td>
-    </tr>
-  </tbody>
-</table>
-
-
-
-It makes me realise that the `street` and `amneties` features would need some Natural Language Processing. As I don't have the knowledge needed here, and I think I have enough location information with `neighbourhood_cleansed` and `zipcode`, I decide to delete `street`. I also delete `amenities` and the dates features as I find these ones too complicated to process for the moment. I might decide to add them after if my model is not great.
+#### Selection on Sparse Categorical Features
+Let's have a look at the categorical data to see the number of unique values.
 
 
 ```python
-# Drop street as we have enought localisation info (redundant)
-# Drop calendar_last_scraped and calendar_updated (date)
+categories = listings.columns[listings.dtypes == 'object']
+percentage_unique = listings[categories].nunique() / listings.shape[0]
 
-useless = ['street', 'amenities', 'calendar_last_scraped', 'calendar_updated']
-data.drop(useless, axis=1, inplace=True)
+ax = percentage_unique.plot(kind = 'bar', color='#E35A5C', figsize = (16, 5))
+ax.set_xlabel('Feature')
+ax.set_ylabel('Percent # Unique')
+ax.set_title('Feature Emptiness')
+plt.show()
 ```
 
-Now, let's have a look at the `zipcode` feature. The visualisation of the `data` dataframe made me realise that there are lots of different postcodes, maybe too many?
+
+![png](output_14_0.png)
+
+
+We can see that the `street` and `amenities` features have a large number of unique values. It would require some natural language processing to properly wrangle these into useful features. We believe we have enough location information with `neighbourhood_cleansed` and `zipcode` so we'll remove `street`. We also remove `amenities`, `calendar_updated` and `calendar_last_updated` features as these are too complicated to process for the moment. 
 
 
 ```python
-# Focus on postcodes
-
-from collections import Counter
-
-# Get number of zipcodes
-nb_counts = Counter(data.zipcode)
-print("Number of Zipcodes:", len(nb_counts))
+to_drop = ['street', 'amenities', 'calendar_last_scraped', 'calendar_updated']
+listings.drop(to_drop, axis=1, inplace=True)
 ```
 
-    Number of Zipcodes: 24775
+Now, let's have a look at the `zipcode` feature. The above visualisation shows us that there are lots of different postcodes, maybe too many?
+
+
+```python
+print("Number of Zipcodes:", listings['zipcode'].nunique())
+```
+
+    Number of Zipcodes: 24774
     
 
-Indeed, there are too many postcodes. If I leave this feature like that, it might cause overfitting. What I decide to do is to regroup the postcodes. At the moment, they are separated as in the following example: KT1 1PE. I decide to only keep the first part of the postcodes (e.g. KT1) which gives me some less precise location information.
+Indeed, there are too many zipcodes. If we leave this feature as is it might cause overfitting. Instead we can regroup the postcodes. At the moment, they are separated as in the following example: KT1 1PE. We'll keep the first part of the zipcode (e.g. KT1) and accept that this gives us some less precise location information.
 
 
 ```python
-for i in range(0, data.shape[0]):
-    zc = data.iloc[i, 2]
-    if type(zc) is str:
-        zc = zc.split(" ") 
-        data.iloc[i, 2] = zc[0]
-    else:
-        data.iloc[i, 2] = "OTHER"
+listings['zipcode'] = listings['zipcode'].str.slice(0,3)
+listings['zipcode'] = listings['zipcode'].fillna("OTHER")
+print("Number of Zipcodes:", listings['zipcode'].nunique())
 ```
 
-
-```python
-# Get number of zipcodes
-nb_counts = Counter(data.zipcode)
-print("Number of Zipcodes:", len(nb_counts))
-```
-
-    Number of Zipcodes: 1072
+    Number of Zipcodes: 461
     
 
-Now, I only have 1072 different postcodes, which is much better than before. Let's have a look at the `data` dataframe to be sure that the postcodes have the correct form.
+Now, I only have 461 different zipcodes, which is much better than before. Let's have a look at the data dataframe to be sure that the postcodes have the correct form.
 
 
 ```python
-data.head()
+listings.head()
 ```
 
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1010,17 +356,15 @@ data.head()
     </tr>
   </tbody>
 </table>
+<p>5 rows × 27 columns</p>
+</div>
 
 
-
-Now, I want to know how many appartments are contained in each postcode.
 
 
 ```python
-# Plot number of listings in each zipcode
-import pandas as pd
-tdf = pd.DataFrame.from_dict(nb_counts, orient='index').sort_values(by=0)
-ax = tdf.plot(kind='bar', figsize = (30,8), color = '#E35A5C', alpha = 0.85)
+count_per_zipcode = listings['zipcode'].value_counts()
+ax = count_per_zipcode.plot(kind='bar', figsize = (30,8), color = '#E35A5C', alpha = 0.85)
 ax.set_title("Zipcodes by Number of Listings")
 ax.set_xlabel("Zipcode")
 ax.set_ylabel("# of Listings")
@@ -1028,120 +372,94 @@ plt.show()
 ```
 
 
-![png](plots/output_38_0.png)
+![png](output_23_0.png)
 
 
-As we can see, lots of postcodes only contain less than 100 appartments. Only few postcodes contains most of the appartments. 
-Let's keep these ones.
-
-
-```python
-# Delete zipcodes with less than 100 entries
-for i in list(nb_counts):
-    if nb_counts[i] < 100:
-        del nb_counts[i]
-        data = data[data.zipcode != i]
-```
+As we can see, a lot of zipcodes contain less than 100 appartments and a few zipcodes contain most of the appartments. Let's keep these ones.
 
 
 ```python
+relevant_zipcodes = count_per_zipcode[count_per_zipcode > 100].index
+listings_zip_filtered = listings[listings['zipcode'].isin(relevant_zipcodes)]
+
 # Plot new zipcodes distribution
-tdf = pd.DataFrame.from_dict(nb_counts, orient='index').sort_values(by=0)
-ax = tdf.plot(kind='bar', figsize = (22,4), color = '#E35A5C', alpha = 0.85)
+count_per_zipcode = listings_zip_filtered['zipcode'].value_counts()
+ax = count_per_zipcode.plot(kind='bar', figsize = (22,4), color = '#E35A5C', alpha = 0.85)
 ax.set_title("Zipcodes by Number of Listings")
 ax.set_xlabel("Zipcode")
 ax.set_ylabel("# of Listings")
 
 plt.show()
 
-print ('Number of entries removed: ', 53904 - data.shape[0])
-
+print('Number of entries removed: ', listings.shape[0] - listings_zip_filtered.shape[0])
 ```
 
 
-![png](plots/output_41_0.png)
+![png](output_25_0.png)
 
 
-    Number of entries removed:  6640
+    Number of entries removed:  5484
     
 
-This distribution is much better, and we only removed 6640 rows from our dataframe which contained about 54000 rows.
+This distribution is much better, and we only removed 5484 rows from our dataframe which contained about 53904 rows.
 
-Now let's have a look at the distribution for the `neighbourhood_cleansed` feature.
+Now let's have a look at the distribution for the `neighbourhood_cleansed feature`.
 
 
 ```python
 # Focus on neighbourhood_cleansed
 
 # Get number of listings in neighborhoods
-nb_counts = Counter(data.neighbourhood_cleansed)
-tdf = pd.DataFrame.from_dict(nb_counts, orient='index').sort_values(by=0)
+count_per_neighborhood = listings_zip_filtered['neighbourhood_cleansed'].value_counts()
 
 # Plot number of listings in each neighborhood
-ax = tdf.plot(kind='bar', figsize = (50,10), color = '#E35A5C', alpha = 0.85)
+ax = count_per_neighborhood.plot(kind='bar', figsize = (50,10), color = '#E35A5C', alpha = 0.85)
 ax.set_title("Neighborhoods by Number of Listings")
 ax.set_xlabel("Neighborhood")
 ax.set_ylabel("# of Listings")
 plt.show()
 
-print("Number of Neighborhoods:", len(nb_counts))
+print("Number of Neighborhoods:", len(count_per_neighborhood))
 ```
 
 
-![png](plots/output_43_0.png)
+![png](output_27_0.png)
 
 
     Number of Neighborhoods: 33
     
 
-The distribution is fine, and there is only 33 neighborhoods. But some only contain around ten appartments, and this is useless for our model. So let's keep the neighborhoods that contain more than 100 appartments.
+The distribution is fine and there are only 33 neighborhoods. But some only contain around 10 appartments and this is useless for our model so let's keep the neighborhoods that contain more than 100 appartments.
 
 
 ```python
-data.shape
-```
-
-
-
-
-    (47264, 27)
-
-
-
-
-```python
-# Delete neighborhoods with less than 100 entries
-for i in list(nb_counts):
-    if nb_counts[i] < 100:
-        del nb_counts[i]
-        data = data[data.neighbourhood_cleansed != i]
+relevant_neighborhoods = count_per_neighborhood[count_per_neighborhood > 100].index
+listings_neighborhood_filtered = listings_zip_filtered[listings_zip_filtered['neighbourhood_cleansed'].isin(relevant_neighborhoods)]
 
 # Plot new neighborhoods distribution
-tdf = pd.DataFrame.from_dict(nb_counts, orient='index').sort_values(by=0)
-ax = tdf.plot(kind='bar', figsize = (22,4), color = '#E35A5C', alpha = 0.85)
+count_per_neighborhood = listings_neighborhood_filtered['neighbourhood_cleansed'].value_counts()
+ax = count_per_neighborhood.plot(kind='bar', figsize = (22,4), color = '#E35A5C', alpha = 0.85)
 ax.set_title("Neighborhoods by House # (Top 22)")
 ax.set_xlabel("Neighborhood")
 ax.set_ylabel("# of Listings")
 
 plt.show()
 
-print('Number of entries removed: ', 47264 - data.shape[0])
+print('Number of entries removed: ', listings_zip_filtered.shape[0] - listings_neighborhood_filtered.shape[0])
 ```
 
 
-![png](plots/output_46_0.png)
+![png](output_29_0.png)
 
 
-    Number of entries removed:  288
+    Number of entries removed:  173
     
 
-By doing this, I only removed 288 rows. I still have more than 46000 rows in my dataframe.
+By doing this, we only removed 173 rows. We still have more than 46000 rows in our data.
 
-I can now go on with my feature selection by examining multicollinearity.
+The next step is to examine multicollinearity.
 
-### Multicollinearity Evaluation <a name="selection_multicol"></a>
-
-This part of the code will give me a dataframe with correlation coefficients.
+#### Selection on Correlated Features
 
 
 ```python
@@ -1158,23 +476,36 @@ def encode_categorical(array):
         return array
     
 # Temporary dataframe
-temp_data = data.copy()
+temp_data = listings_neighborhood_filtered.copy()
+
 # Delete additional entries with NaN values
 temp_data = temp_data.dropna(axis=0)
 
 # Encode categorical data
 temp_data = temp_data.apply(encode_categorical)
 # Compute matrix of correlation coefficients
-corr_matrix = np.corrcoef(temp_data.T)
+corr_matrix = temp_data.corr()
 
-corr_df = pd.DataFrame(data = corr_matrix, columns = temp_data.columns, 
-             index = temp_data.columns)
-
-corr_df
+corr_matrix
 ```
-    
 
 
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1206,506 +537,506 @@ corr_df
     <tr>
       <th>host_total_listings_count</th>
       <td>1.000000</td>
-      <td>-0.013738</td>
-      <td>0.051501</td>
-      <td>-0.016016</td>
-      <td>-0.072001</td>
-      <td>0.063519</td>
-      <td>-0.131653</td>
-      <td>0.200126</td>
-      <td>0.166858</td>
-      <td>0.211850</td>
+      <td>-0.012579</td>
+      <td>0.047793</td>
+      <td>-0.012979</td>
+      <td>-0.071976</td>
+      <td>0.062116</td>
+      <td>-0.131357</td>
+      <td>0.198319</td>
+      <td>0.165851</td>
+      <td>0.209925</td>
       <td>...</td>
-      <td>-0.058937</td>
-      <td>-0.068261</td>
-      <td>-0.074833</td>
-      <td>-0.070235</td>
+      <td>-0.060110</td>
+      <td>-0.069431</td>
+      <td>-0.076003</td>
+      <td>-0.070112</td>
       <td>NaN</td>
-      <td>0.150995</td>
-      <td>0.164600</td>
-      <td>-0.017040</td>
-      <td>0.005109</td>
-      <td>0.675006</td>
+      <td>0.146111</td>
+      <td>0.164194</td>
+      <td>-0.017255</td>
+      <td>0.006566</td>
+      <td>0.669057</td>
     </tr>
     <tr>
       <th>neighbourhood_cleansed</th>
-      <td>-0.013738</td>
+      <td>-0.012579</td>
       <td>1.000000</td>
-      <td>0.077536</td>
-      <td>-0.341562</td>
-      <td>0.199898</td>
-      <td>-0.063524</td>
-      <td>-0.006576</td>
-      <td>0.023728</td>
-      <td>0.004714</td>
-      <td>-0.004792</td>
+      <td>0.003328</td>
+      <td>-0.302733</td>
+      <td>0.179035</td>
+      <td>-0.056675</td>
+      <td>-0.006117</td>
+      <td>0.023104</td>
+      <td>0.008597</td>
+      <td>-0.000389</td>
       <td>...</td>
-      <td>0.003702</td>
-      <td>-0.003835</td>
-      <td>-0.004243</td>
-      <td>-0.003974</td>
+      <td>-0.003836</td>
+      <td>-0.010341</td>
+      <td>-0.011009</td>
+      <td>-0.009244</td>
       <td>NaN</td>
-      <td>0.025385</td>
-      <td>0.046251</td>
-      <td>0.003457</td>
-      <td>0.000373</td>
-      <td>0.034339</td>
+      <td>0.020990</td>
+      <td>0.040604</td>
+      <td>0.001989</td>
+      <td>0.000092</td>
+      <td>0.029394</td>
     </tr>
     <tr>
       <th>zipcode</th>
-      <td>0.051501</td>
-      <td>0.077536</td>
+      <td>0.047793</td>
+      <td>0.003328</td>
       <td>1.000000</td>
-      <td>-0.452818</td>
-      <td>-0.648251</td>
-      <td>-0.024881</td>
-      <td>-0.132323</td>
-      <td>0.076068</td>
-      <td>0.041722</td>
-      <td>0.055485</td>
+      <td>-0.373074</td>
+      <td>-0.627589</td>
+      <td>-0.022068</td>
+      <td>-0.130317</td>
+      <td>0.076929</td>
+      <td>0.042599</td>
+      <td>0.057120</td>
       <td>...</td>
-      <td>0.007620</td>
-      <td>0.002631</td>
-      <td>0.000332</td>
-      <td>0.015260</td>
+      <td>-0.005104</td>
+      <td>-0.008958</td>
+      <td>-0.010710</td>
+      <td>0.009421</td>
       <td>NaN</td>
-      <td>0.000722</td>
-      <td>0.056807</td>
-      <td>-0.013173</td>
-      <td>0.009232</td>
-      <td>0.021644</td>
+      <td>-0.000491</td>
+      <td>0.049190</td>
+      <td>-0.014428</td>
+      <td>0.010924</td>
+      <td>0.012256</td>
     </tr>
     <tr>
       <th>latitude</th>
-      <td>-0.016016</td>
-      <td>-0.341562</td>
-      <td>-0.452818</td>
+      <td>-0.012979</td>
+      <td>-0.302733</td>
+      <td>-0.373074</td>
       <td>1.000000</td>
-      <td>0.137186</td>
-      <td>-0.029977</td>
-      <td>0.019271</td>
-      <td>-0.024787</td>
-      <td>-0.027083</td>
-      <td>-0.043288</td>
+      <td>0.140862</td>
+      <td>-0.051516</td>
+      <td>0.007928</td>
+      <td>-0.017890</td>
+      <td>-0.028255</td>
+      <td>-0.045592</td>
       <td>...</td>
-      <td>-0.032824</td>
-      <td>-0.031346</td>
-      <td>-0.030226</td>
-      <td>-0.025894</td>
+      <td>-0.039670</td>
+      <td>-0.039075</td>
+      <td>-0.037523</td>
+      <td>-0.030103</td>
       <td>NaN</td>
-      <td>0.009923</td>
-      <td>-0.000559</td>
-      <td>0.006033</td>
-      <td>-0.004141</td>
-      <td>0.001983</td>
+      <td>0.010806</td>
+      <td>0.012319</td>
+      <td>0.008761</td>
+      <td>0.001707</td>
+      <td>0.014551</td>
     </tr>
     <tr>
       <th>longitude</th>
-      <td>-0.072001</td>
-      <td>0.199898</td>
-      <td>-0.648251</td>
-      <td>0.137186</td>
+      <td>-0.071976</td>
+      <td>0.179035</td>
+      <td>-0.627589</td>
+      <td>0.140862</td>
       <td>1.000000</td>
-      <td>0.007093</td>
-      <td>0.105951</td>
-      <td>-0.061036</td>
-      <td>-0.048459</td>
-      <td>-0.062039</td>
+      <td>0.003956</td>
+      <td>0.104162</td>
+      <td>-0.060852</td>
+      <td>-0.051775</td>
+      <td>-0.064843</td>
       <td>...</td>
-      <td>-0.015442</td>
-      <td>-0.012797</td>
-      <td>-0.009347</td>
-      <td>-0.015773</td>
+      <td>-0.008221</td>
+      <td>-0.006811</td>
+      <td>-0.003874</td>
+      <td>-0.009832</td>
       <td>NaN</td>
-      <td>-0.016999</td>
-      <td>-0.020654</td>
-      <td>0.018315</td>
-      <td>0.001092</td>
-      <td>-0.041229</td>
+      <td>-0.013801</td>
+      <td>-0.021398</td>
+      <td>0.015613</td>
+      <td>0.003309</td>
+      <td>-0.038896</td>
     </tr>
     <tr>
       <th>property_type</th>
-      <td>0.063519</td>
-      <td>-0.063524</td>
-      <td>-0.024881</td>
-      <td>-0.029977</td>
-      <td>0.007093</td>
+      <td>0.062116</td>
+      <td>-0.056675</td>
+      <td>-0.022068</td>
+      <td>-0.051516</td>
+      <td>0.003956</td>
       <td>1.000000</td>
-      <td>0.200385</td>
-      <td>0.061489</td>
-      <td>0.241293</td>
-      <td>0.191274</td>
+      <td>0.202812</td>
+      <td>0.056563</td>
+      <td>0.234284</td>
+      <td>0.188911</td>
       <td>...</td>
-      <td>0.033880</td>
-      <td>0.040624</td>
-      <td>0.037230</td>
-      <td>0.028587</td>
+      <td>0.041762</td>
+      <td>0.048879</td>
+      <td>0.044834</td>
+      <td>0.031474</td>
       <td>NaN</td>
-      <td>0.005611</td>
-      <td>-0.073774</td>
-      <td>0.008541</td>
-      <td>-0.014637</td>
-      <td>-0.031336</td>
+      <td>0.004598</td>
+      <td>-0.078796</td>
+      <td>0.009363</td>
+      <td>-0.017384</td>
+      <td>-0.037722</td>
     </tr>
     <tr>
       <th>room_type</th>
-      <td>-0.131653</td>
-      <td>-0.006576</td>
-      <td>-0.132323</td>
-      <td>0.019271</td>
-      <td>0.105951</td>
-      <td>0.200385</td>
+      <td>-0.131357</td>
+      <td>-0.006117</td>
+      <td>-0.130317</td>
+      <td>0.007928</td>
+      <td>0.104162</td>
+      <td>0.202812</td>
       <td>1.000000</td>
-      <td>-0.552309</td>
-      <td>-0.133146</td>
-      <td>-0.376914</td>
+      <td>-0.552787</td>
+      <td>-0.135641</td>
+      <td>-0.375012</td>
       <td>...</td>
-      <td>0.186026</td>
-      <td>0.207606</td>
-      <td>0.208968</td>
-      <td>0.144501</td>
+      <td>0.189672</td>
+      <td>0.210795</td>
+      <td>0.211935</td>
+      <td>0.146392</td>
       <td>NaN</td>
-      <td>0.032534</td>
-      <td>-0.226814</td>
-      <td>0.009030</td>
-      <td>-0.037406</td>
-      <td>-0.143806</td>
+      <td>0.029777</td>
+      <td>-0.230055</td>
+      <td>0.009881</td>
+      <td>-0.039027</td>
+      <td>-0.144706</td>
     </tr>
     <tr>
       <th>accommodates</th>
-      <td>0.200126</td>
-      <td>0.023728</td>
-      <td>0.076068</td>
-      <td>-0.024787</td>
-      <td>-0.061036</td>
-      <td>0.061489</td>
-      <td>-0.552309</td>
+      <td>0.198319</td>
+      <td>0.023104</td>
+      <td>0.076929</td>
+      <td>-0.017890</td>
+      <td>-0.060852</td>
+      <td>0.056563</td>
+      <td>-0.552787</td>
       <td>1.000000</td>
-      <td>0.458911</td>
-      <td>0.759394</td>
+      <td>0.463455</td>
+      <td>0.758304</td>
       <td>...</td>
-      <td>-0.063823</td>
-      <td>-0.095185</td>
-      <td>-0.094233</td>
-      <td>-0.029171</td>
+      <td>-0.068308</td>
+      <td>-0.099249</td>
+      <td>-0.097895</td>
+      <td>-0.031711</td>
       <td>NaN</td>
-      <td>0.034965</td>
-      <td>0.240081</td>
-      <td>0.001646</td>
-      <td>0.055264</td>
-      <td>0.203671</td>
+      <td>0.039419</td>
+      <td>0.241419</td>
+      <td>0.000839</td>
+      <td>0.060075</td>
+      <td>0.201753</td>
     </tr>
     <tr>
       <th>bathrooms</th>
-      <td>0.166858</td>
-      <td>0.004714</td>
-      <td>0.041722</td>
-      <td>-0.027083</td>
-      <td>-0.048459</td>
-      <td>0.241293</td>
-      <td>-0.133146</td>
-      <td>0.458911</td>
+      <td>0.165851</td>
+      <td>0.008597</td>
+      <td>0.042599</td>
+      <td>-0.028255</td>
+      <td>-0.051775</td>
+      <td>0.234284</td>
+      <td>-0.135641</td>
+      <td>0.463455</td>
       <td>1.000000</td>
-      <td>0.538818</td>
+      <td>0.543456</td>
       <td>...</td>
-      <td>-0.011958</td>
-      <td>-0.018866</td>
-      <td>-0.024146</td>
-      <td>-0.013673</td>
+      <td>-0.013049</td>
+      <td>-0.019711</td>
+      <td>-0.025004</td>
+      <td>-0.014161</td>
       <td>NaN</td>
-      <td>-0.001259</td>
-      <td>0.085671</td>
-      <td>-0.015896</td>
-      <td>0.003098</td>
-      <td>0.128682</td>
+      <td>-0.001588</td>
+      <td>0.085349</td>
+      <td>-0.014896</td>
+      <td>0.007856</td>
+      <td>0.128801</td>
     </tr>
     <tr>
       <th>bedrooms</th>
-      <td>0.211850</td>
-      <td>-0.004792</td>
-      <td>0.055485</td>
-      <td>-0.043288</td>
-      <td>-0.062039</td>
-      <td>0.191274</td>
-      <td>-0.376914</td>
-      <td>0.759394</td>
-      <td>0.538818</td>
+      <td>0.209925</td>
+      <td>-0.000389</td>
+      <td>0.057120</td>
+      <td>-0.045592</td>
+      <td>-0.064843</td>
+      <td>0.188911</td>
+      <td>-0.375012</td>
+      <td>0.758304</td>
+      <td>0.543456</td>
       <td>1.000000</td>
       <td>...</td>
-      <td>-0.070983</td>
-      <td>-0.090951</td>
-      <td>-0.097159</td>
-      <td>-0.069897</td>
+      <td>-0.072836</td>
+      <td>-0.092369</td>
+      <td>-0.098422</td>
+      <td>-0.071705</td>
       <td>NaN</td>
-      <td>-0.039755</td>
-      <td>0.130258</td>
-      <td>-0.009946</td>
-      <td>0.019544</td>
-      <td>0.123870</td>
+      <td>-0.037056</td>
+      <td>0.128916</td>
+      <td>-0.010849</td>
+      <td>0.021893</td>
+      <td>0.121240</td>
     </tr>
     <tr>
       <th>beds</th>
-      <td>0.177466</td>
-      <td>0.003395</td>
-      <td>0.069171</td>
-      <td>-0.027013</td>
-      <td>-0.070092</td>
-      <td>0.138148</td>
-      <td>-0.389782</td>
-      <td>0.827682</td>
-      <td>0.486604</td>
-      <td>0.738863</td>
+      <td>0.175617</td>
+      <td>0.005226</td>
+      <td>0.068929</td>
+      <td>-0.027148</td>
+      <td>-0.069206</td>
+      <td>0.136098</td>
+      <td>-0.390141</td>
+      <td>0.828811</td>
+      <td>0.492722</td>
+      <td>0.740434</td>
       <td>...</td>
-      <td>-0.045556</td>
-      <td>-0.069313</td>
-      <td>-0.071514</td>
-      <td>-0.015594</td>
+      <td>-0.048591</td>
+      <td>-0.071515</td>
+      <td>-0.073477</td>
+      <td>-0.018182</td>
       <td>NaN</td>
-      <td>0.016289</td>
-      <td>0.183095</td>
-      <td>-0.000087</td>
-      <td>0.032990</td>
-      <td>0.156275</td>
+      <td>0.018870</td>
+      <td>0.182380</td>
+      <td>-0.000805</td>
+      <td>0.036976</td>
+      <td>0.152292</td>
     </tr>
     <tr>
       <th>bed_type</th>
-      <td>0.016484</td>
-      <td>0.016958</td>
-      <td>0.007221</td>
-      <td>-0.006280</td>
-      <td>-0.000442</td>
-      <td>0.002990</td>
-      <td>-0.079493</td>
-      <td>0.059276</td>
-      <td>0.044552</td>
-      <td>0.059219</td>
+      <td>0.016339</td>
+      <td>0.014825</td>
+      <td>0.004423</td>
+      <td>-0.006048</td>
+      <td>-0.000671</td>
+      <td>0.001046</td>
+      <td>-0.079318</td>
+      <td>0.058159</td>
+      <td>0.043727</td>
+      <td>0.058726</td>
       <td>...</td>
-      <td>-0.023812</td>
-      <td>-0.024986</td>
-      <td>-0.023234</td>
-      <td>-0.020204</td>
+      <td>-0.024428</td>
+      <td>-0.025206</td>
+      <td>-0.023346</td>
+      <td>-0.020291</td>
       <td>NaN</td>
-      <td>0.022936</td>
-      <td>0.027748</td>
-      <td>-0.000577</td>
-      <td>0.003071</td>
-      <td>0.026753</td>
+      <td>0.021846</td>
+      <td>0.026896</td>
+      <td>-0.000692</td>
+      <td>0.003776</td>
+      <td>0.026799</td>
     </tr>
     <tr>
       <th>price</th>
-      <td>-0.066191</td>
-      <td>-0.023474</td>
-      <td>-0.049499</td>
-      <td>0.007380</td>
-      <td>0.023416</td>
-      <td>-0.033272</td>
-      <td>0.192117</td>
-      <td>-0.265193</td>
-      <td>-0.158217</td>
-      <td>-0.278200</td>
+      <td>-0.065886</td>
+      <td>-0.019999</td>
+      <td>-0.047314</td>
+      <td>0.006318</td>
+      <td>0.020112</td>
+      <td>-0.030861</td>
+      <td>0.193470</td>
+      <td>-0.262744</td>
+      <td>-0.156123</td>
+      <td>-0.272740</td>
       <td>...</td>
-      <td>0.000102</td>
-      <td>0.008496</td>
-      <td>0.008873</td>
-      <td>-0.007275</td>
+      <td>0.000363</td>
+      <td>0.008053</td>
+      <td>0.007712</td>
+      <td>-0.009300</td>
       <td>NaN</td>
-      <td>0.018753</td>
-      <td>-0.093060</td>
-      <td>0.000242</td>
-      <td>-0.028706</td>
-      <td>-0.101950</td>
+      <td>0.017939</td>
+      <td>-0.096777</td>
+      <td>0.001290</td>
+      <td>-0.027913</td>
+      <td>-0.104249</td>
     </tr>
     <tr>
       <th>guests_included</th>
-      <td>-0.030653</td>
-      <td>0.012419</td>
-      <td>0.015160</td>
-      <td>0.005790</td>
-      <td>-0.002472</td>
-      <td>-0.003820</td>
-      <td>-0.289656</td>
-      <td>0.480018</td>
-      <td>0.194212</td>
-      <td>0.348599</td>
+      <td>-0.029246</td>
+      <td>0.012110</td>
+      <td>0.014242</td>
+      <td>0.008741</td>
+      <td>-0.003703</td>
+      <td>-0.007391</td>
+      <td>-0.289828</td>
+      <td>0.479720</td>
+      <td>0.196801</td>
+      <td>0.347028</td>
       <td>...</td>
-      <td>-0.013624</td>
-      <td>-0.027157</td>
-      <td>-0.023439</td>
-      <td>0.029016</td>
+      <td>-0.016228</td>
+      <td>-0.029633</td>
+      <td>-0.025859</td>
+      <td>0.026506</td>
       <td>NaN</td>
-      <td>-0.019297</td>
-      <td>0.196120</td>
-      <td>0.022323</td>
-      <td>0.094524</td>
-      <td>0.060239</td>
+      <td>-0.016875</td>
+      <td>0.195895</td>
+      <td>0.021892</td>
+      <td>0.097790</td>
+      <td>0.063893</td>
     </tr>
     <tr>
       <th>extra_people</th>
-      <td>-0.056591</td>
-      <td>0.013182</td>
-      <td>0.004439</td>
-      <td>-0.002158</td>
-      <td>0.012007</td>
-      <td>0.000438</td>
-      <td>0.010600</td>
-      <td>0.084464</td>
-      <td>0.011485</td>
-      <td>0.014340</td>
+      <td>-0.056021</td>
+      <td>0.010166</td>
+      <td>0.000828</td>
+      <td>0.000183</td>
+      <td>0.011866</td>
+      <td>0.003183</td>
+      <td>0.010112</td>
+      <td>0.084570</td>
+      <td>0.010378</td>
+      <td>0.014297</td>
       <td>...</td>
-      <td>0.066816</td>
-      <td>0.074323</td>
-      <td>0.079871</td>
-      <td>0.093986</td>
+      <td>0.067422</td>
+      <td>0.074154</td>
+      <td>0.079333</td>
+      <td>0.093654</td>
       <td>NaN</td>
-      <td>-0.005465</td>
-      <td>0.119186</td>
-      <td>0.037090</td>
-      <td>0.049904</td>
-      <td>-0.032996</td>
+      <td>-0.007993</td>
+      <td>0.118060</td>
+      <td>0.038805</td>
+      <td>0.052325</td>
+      <td>-0.031364</td>
     </tr>
     <tr>
       <th>minimum_nights</th>
-      <td>0.028281</td>
-      <td>-0.008297</td>
-      <td>0.013001</td>
-      <td>0.017135</td>
-      <td>-0.014949</td>
-      <td>-0.005073</td>
-      <td>-0.115240</td>
-      <td>0.047342</td>
-      <td>0.043238</td>
-      <td>0.079624</td>
+      <td>0.027843</td>
+      <td>-0.010565</td>
+      <td>0.014820</td>
+      <td>0.017276</td>
+      <td>-0.015540</td>
+      <td>-0.008599</td>
+      <td>-0.115689</td>
+      <td>0.045265</td>
+      <td>0.040817</td>
+      <td>0.075248</td>
       <td>...</td>
-      <td>-0.047248</td>
-      <td>-0.042537</td>
-      <td>-0.042612</td>
-      <td>-0.033879</td>
+      <td>-0.046940</td>
+      <td>-0.041594</td>
+      <td>-0.041539</td>
+      <td>-0.033325</td>
       <td>NaN</td>
-      <td>-0.028099</td>
-      <td>0.071649</td>
-      <td>0.003607</td>
-      <td>0.001933</td>
-      <td>0.018877</td>
+      <td>-0.028620</td>
+      <td>0.073003</td>
+      <td>0.003290</td>
+      <td>0.000333</td>
+      <td>0.019890</td>
     </tr>
     <tr>
       <th>maximum_nights</th>
-      <td>0.102711</td>
-      <td>0.017721</td>
-      <td>0.023497</td>
-      <td>0.000105</td>
-      <td>-0.023045</td>
-      <td>-0.041167</td>
-      <td>-0.065808</td>
-      <td>0.078623</td>
-      <td>0.023300</td>
-      <td>0.027361</td>
+      <td>0.102665</td>
+      <td>0.014282</td>
+      <td>0.018916</td>
+      <td>0.005205</td>
+      <td>-0.021578</td>
+      <td>-0.042512</td>
+      <td>-0.066000</td>
+      <td>0.077495</td>
+      <td>0.023800</td>
+      <td>0.027493</td>
       <td>...</td>
-      <td>0.006105</td>
-      <td>-0.002623</td>
-      <td>-0.004924</td>
-      <td>0.088314</td>
+      <td>0.006868</td>
+      <td>-0.001986</td>
+      <td>-0.004453</td>
+      <td>0.090915</td>
       <td>NaN</td>
-      <td>0.004953</td>
-      <td>0.073872</td>
-      <td>-0.046274</td>
-      <td>-0.039051</td>
-      <td>0.167868</td>
+      <td>0.005699</td>
+      <td>0.075332</td>
+      <td>-0.047263</td>
+      <td>-0.037626</td>
+      <td>0.170661</td>
     </tr>
     <tr>
       <th>availability_30</th>
-      <td>-0.058937</td>
-      <td>0.003702</td>
-      <td>0.007620</td>
-      <td>-0.032824</td>
-      <td>-0.015442</td>
-      <td>0.033880</td>
-      <td>0.186026</td>
-      <td>-0.063823</td>
-      <td>-0.011958</td>
-      <td>-0.070983</td>
+      <td>-0.060110</td>
+      <td>-0.003836</td>
+      <td>-0.005104</td>
+      <td>-0.039670</td>
+      <td>-0.008221</td>
+      <td>0.041762</td>
+      <td>0.189672</td>
+      <td>-0.068308</td>
+      <td>-0.013049</td>
+      <td>-0.072836</td>
       <td>...</td>
       <td>1.000000</td>
-      <td>0.951335</td>
-      <td>0.909845</td>
-      <td>0.662322</td>
+      <td>0.951363</td>
+      <td>0.909728</td>
+      <td>0.662000</td>
       <td>NaN</td>
-      <td>-0.040297</td>
-      <td>0.013331</td>
-      <td>0.033508</td>
-      <td>0.028194</td>
-      <td>0.040900</td>
+      <td>-0.042309</td>
+      <td>0.006077</td>
+      <td>0.033889</td>
+      <td>0.027486</td>
+      <td>0.035494</td>
     </tr>
     <tr>
       <th>availability_60</th>
-      <td>-0.068261</td>
-      <td>-0.003835</td>
-      <td>0.002631</td>
-      <td>-0.031346</td>
-      <td>-0.012797</td>
-      <td>0.040624</td>
-      <td>0.207606</td>
-      <td>-0.095185</td>
-      <td>-0.018866</td>
-      <td>-0.090951</td>
+      <td>-0.069431</td>
+      <td>-0.010341</td>
+      <td>-0.008958</td>
+      <td>-0.039075</td>
+      <td>-0.006811</td>
+      <td>0.048879</td>
+      <td>0.210795</td>
+      <td>-0.099249</td>
+      <td>-0.019711</td>
+      <td>-0.092369</td>
       <td>...</td>
-      <td>0.951335</td>
+      <td>0.951363</td>
       <td>1.000000</td>
-      <td>0.978723</td>
-      <td>0.714241</td>
+      <td>0.978762</td>
+      <td>0.714213</td>
       <td>NaN</td>
-      <td>-0.042370</td>
-      <td>0.018407</td>
-      <td>0.038126</td>
-      <td>0.031845</td>
-      <td>0.036321</td>
+      <td>-0.044611</td>
+      <td>0.011487</td>
+      <td>0.039196</td>
+      <td>0.031460</td>
+      <td>0.030988</td>
     </tr>
     <tr>
       <th>availability_90</th>
-      <td>-0.074833</td>
-      <td>-0.004243</td>
-      <td>0.000332</td>
-      <td>-0.030226</td>
-      <td>-0.009347</td>
-      <td>0.037230</td>
-      <td>0.208968</td>
-      <td>-0.094233</td>
-      <td>-0.024146</td>
-      <td>-0.097159</td>
+      <td>-0.076003</td>
+      <td>-0.011009</td>
+      <td>-0.010710</td>
+      <td>-0.037523</td>
+      <td>-0.003874</td>
+      <td>0.044834</td>
+      <td>0.211935</td>
+      <td>-0.097895</td>
+      <td>-0.025004</td>
+      <td>-0.098422</td>
       <td>...</td>
-      <td>0.909845</td>
-      <td>0.978723</td>
+      <td>0.909728</td>
+      <td>0.978762</td>
       <td>1.000000</td>
-      <td>0.741673</td>
+      <td>0.741623</td>
       <td>NaN</td>
-      <td>-0.034473</td>
-      <td>0.027107</td>
-      <td>0.042597</td>
-      <td>0.038359</td>
-      <td>0.041097</td>
+      <td>-0.036265</td>
+      <td>0.020522</td>
+      <td>0.043412</td>
+      <td>0.038177</td>
+      <td>0.036185</td>
     </tr>
     <tr>
       <th>availability_365</th>
-      <td>-0.070235</td>
-      <td>-0.003974</td>
-      <td>0.015260</td>
-      <td>-0.025894</td>
-      <td>-0.015773</td>
-      <td>0.028587</td>
-      <td>0.144501</td>
-      <td>-0.029171</td>
-      <td>-0.013673</td>
-      <td>-0.069897</td>
+      <td>-0.070112</td>
+      <td>-0.009244</td>
+      <td>0.009421</td>
+      <td>-0.030103</td>
+      <td>-0.009832</td>
+      <td>0.031474</td>
+      <td>0.146392</td>
+      <td>-0.031711</td>
+      <td>-0.014161</td>
+      <td>-0.071705</td>
       <td>...</td>
-      <td>0.662322</td>
-      <td>0.714241</td>
-      <td>0.741673</td>
+      <td>0.662000</td>
+      <td>0.714213</td>
+      <td>0.741623</td>
       <td>1.000000</td>
       <td>NaN</td>
-      <td>-0.027778</td>
-      <td>0.095777</td>
-      <td>0.063612</td>
-      <td>0.076889</td>
-      <td>0.085851</td>
+      <td>-0.027561</td>
+      <td>0.091194</td>
+      <td>0.062841</td>
+      <td>0.080108</td>
+      <td>0.086124</td>
     </tr>
     <tr>
       <th>requires_license</th>
@@ -1733,135 +1064,133 @@ corr_df
     </tr>
     <tr>
       <th>instant_bookable</th>
-      <td>0.150995</td>
-      <td>0.025385</td>
-      <td>0.000722</td>
-      <td>0.009923</td>
-      <td>-0.016999</td>
-      <td>0.005611</td>
-      <td>0.032534</td>
-      <td>0.034965</td>
-      <td>-0.001259</td>
-      <td>-0.039755</td>
+      <td>0.146111</td>
+      <td>0.020990</td>
+      <td>-0.000491</td>
+      <td>0.010806</td>
+      <td>-0.013801</td>
+      <td>0.004598</td>
+      <td>0.029777</td>
+      <td>0.039419</td>
+      <td>-0.001588</td>
+      <td>-0.037056</td>
       <td>...</td>
-      <td>-0.040297</td>
-      <td>-0.042370</td>
-      <td>-0.034473</td>
-      <td>-0.027778</td>
+      <td>-0.042309</td>
+      <td>-0.044611</td>
+      <td>-0.036265</td>
+      <td>-0.027561</td>
       <td>NaN</td>
       <td>1.000000</td>
-      <td>0.044271</td>
-      <td>-0.002278</td>
-      <td>-0.014941</td>
-      <td>0.199434</td>
+      <td>0.048355</td>
+      <td>-0.001984</td>
+      <td>-0.015647</td>
+      <td>0.195284</td>
     </tr>
     <tr>
       <th>cancellation_policy</th>
-      <td>0.164600</td>
-      <td>0.046251</td>
-      <td>0.056807</td>
-      <td>-0.000559</td>
-      <td>-0.020654</td>
-      <td>-0.073774</td>
-      <td>-0.226814</td>
-      <td>0.240081</td>
-      <td>0.085671</td>
-      <td>0.130258</td>
+      <td>0.164194</td>
+      <td>0.040604</td>
+      <td>0.049190</td>
+      <td>0.012319</td>
+      <td>-0.021398</td>
+      <td>-0.078796</td>
+      <td>-0.230055</td>
+      <td>0.241419</td>
+      <td>0.085349</td>
+      <td>0.128916</td>
       <td>...</td>
-      <td>0.013331</td>
-      <td>0.018407</td>
-      <td>0.027107</td>
-      <td>0.095777</td>
+      <td>0.006077</td>
+      <td>0.011487</td>
+      <td>0.020522</td>
+      <td>0.091194</td>
       <td>NaN</td>
-      <td>0.044271</td>
+      <td>0.048355</td>
       <td>1.000000</td>
-      <td>0.066632</td>
-      <td>0.107026</td>
-      <td>0.268678</td>
+      <td>0.068046</td>
+      <td>0.112042</td>
+      <td>0.269971</td>
     </tr>
     <tr>
       <th>require_guest_profile_picture</th>
-      <td>-0.017040</td>
-      <td>0.003457</td>
-      <td>-0.013173</td>
-      <td>0.006033</td>
-      <td>0.018315</td>
-      <td>0.008541</td>
-      <td>0.009030</td>
-      <td>0.001646</td>
-      <td>-0.015896</td>
-      <td>-0.009946</td>
+      <td>-0.017255</td>
+      <td>0.001989</td>
+      <td>-0.014428</td>
+      <td>0.008761</td>
+      <td>0.015613</td>
+      <td>0.009363</td>
+      <td>0.009881</td>
+      <td>0.000839</td>
+      <td>-0.014896</td>
+      <td>-0.010849</td>
       <td>...</td>
-      <td>0.033508</td>
-      <td>0.038126</td>
-      <td>0.042597</td>
-      <td>0.063612</td>
+      <td>0.033889</td>
+      <td>0.039196</td>
+      <td>0.043412</td>
+      <td>0.062841</td>
       <td>NaN</td>
-      <td>-0.002278</td>
-      <td>0.066632</td>
+      <td>-0.001984</td>
+      <td>0.068046</td>
       <td>1.000000</td>
-      <td>0.700899</td>
-      <td>-0.006835</td>
+      <td>0.687601</td>
+      <td>-0.008253</td>
     </tr>
     <tr>
       <th>require_guest_phone_verification</th>
-      <td>0.005109</td>
-      <td>0.000373</td>
-      <td>0.009232</td>
-      <td>-0.004141</td>
-      <td>0.001092</td>
-      <td>-0.014637</td>
-      <td>-0.037406</td>
-      <td>0.055264</td>
-      <td>0.003098</td>
-      <td>0.019544</td>
+      <td>0.006566</td>
+      <td>0.000092</td>
+      <td>0.010924</td>
+      <td>0.001707</td>
+      <td>0.003309</td>
+      <td>-0.017384</td>
+      <td>-0.039027</td>
+      <td>0.060075</td>
+      <td>0.007856</td>
+      <td>0.021893</td>
       <td>...</td>
-      <td>0.028194</td>
-      <td>0.031845</td>
-      <td>0.038359</td>
-      <td>0.076889</td>
+      <td>0.027486</td>
+      <td>0.031460</td>
+      <td>0.038177</td>
+      <td>0.080108</td>
       <td>NaN</td>
-      <td>-0.014941</td>
-      <td>0.107026</td>
-      <td>0.700899</td>
+      <td>-0.015647</td>
+      <td>0.112042</td>
+      <td>0.687601</td>
       <td>1.000000</td>
-      <td>0.102366</td>
+      <td>0.107686</td>
     </tr>
     <tr>
       <th>calculated_host_listings_count</th>
-      <td>0.675006</td>
-      <td>0.034339</td>
-      <td>0.021644</td>
-      <td>0.001983</td>
-      <td>-0.041229</td>
-      <td>-0.031336</td>
-      <td>-0.143806</td>
-      <td>0.203671</td>
-      <td>0.128682</td>
-      <td>0.123870</td>
+      <td>0.669057</td>
+      <td>0.029394</td>
+      <td>0.012256</td>
+      <td>0.014551</td>
+      <td>-0.038896</td>
+      <td>-0.037722</td>
+      <td>-0.144706</td>
+      <td>0.201753</td>
+      <td>0.128801</td>
+      <td>0.121240</td>
       <td>...</td>
-      <td>0.040900</td>
-      <td>0.036321</td>
-      <td>0.041097</td>
-      <td>0.085851</td>
+      <td>0.035494</td>
+      <td>0.030988</td>
+      <td>0.036185</td>
+      <td>0.086124</td>
       <td>NaN</td>
-      <td>0.199434</td>
-      <td>0.268678</td>
-      <td>-0.006835</td>
-      <td>0.102366</td>
+      <td>0.195284</td>
+      <td>0.269971</td>
+      <td>-0.008253</td>
+      <td>0.107686</td>
       <td>1.000000</td>
     </tr>
   </tbody>
 </table>
+<p>27 rows × 27 columns</p>
+</div>
 
 
-
-Here I create a visualisation of the correlation between features, I can then report to the above dataframe to have more details if necessary.
 
 
 ```python
-import matplotlib.pyplot as plt
-
 # Display heat map 
 plt.figure(figsize=(7, 7))
 plt.pcolor(corr_matrix, cmap='RdBu')
@@ -1874,358 +1203,97 @@ plt.show()
 ```
 
 
-![png](plots/output_52_0.png)
+![png](output_33_0.png)
 
 
-This reveals that `calculated_host_listings_count` is highly correlated with `host_total_listings_count`. So I decide to only keep the last one. I also see that the `availability_*` variables are correlated with each other. I decide to keep `availability_365` as this one is the less correlated with other variables. Finally, I decide to drop `requires_license` which has an odd correlation result of NA's which will not be useful in my model.
+This reveals that `calculated_host_listings_count` is highly correlated with `host_total_listings_count`  so we'll keep the latter. We also see that the `availability_*` variables are correlated with each other. We'll keep `availability_365` as this one is less correlated with other variables. Finally, we decide to drop `requires_license` which has an odd correlation result of NA's which will not be useful in our model.
 
 
 ```python
-# Drop calculated_host_listings_count as correlated with host_total_listings_count
-# Keep availability_365 as availability variables are correlated with each other and this one is less correlated with other variables
-# Drop requires_license (odd correlation result and won't impact the results)
-
 useless = ['calculated_host_listings_count', 'availability_30', 'availability_60', 'availability_90', 'requires_license']
-data.drop(useless, axis=1, inplace=True)
+listings_processed = listings_neighborhood_filtered.drop(useless, axis=1)
 ```
 
-The feature selection is now done. Finally, I have a dataframe with 23 features and almost 47000 rows. I kept 87% of the rows of my initial dataframe and deleted 72 variables.
+### Manipulation on Price values
+Now, we need to manipulate some features that relate to `price` as they have a price formatting: they contain the thousand separator (',') and the '$' symbol. Let's get rid of it and transform these features into numeric values.
 
 
 ```python
-print(data.shape)
+listings_processed = listings_processed.copy()
+listings_processed['price'] = listings_processed['price'].str.replace('\$|,', '')
+listings_processed['price'] = pd.to_numeric(listings_processed['price'])
+
+listings_processed['extra_people'] = listings_processed['extra_people'].str.replace('\$|,', '')
+listings_processed['extra_people'] = pd.to_numeric(listings_processed['extra_people'])
 ```
 
-    (46976, 22)
-    
-
-## Manipulation on Price Columns <a name="price_col"></a>
-
-Now, I need to manipulate some features that relate to price as they have a price formatting: they contain the thousand separator (',') and the '$' symbol. Let's get rid of it and transform these features into integer.
-
-
-```python
-# Transform price column
-data['price'] = data['price'].str.replace('$', '')
-data['price'] = data['price'].str.replace(',', '')
-data['price'] = pd.to_numeric(data['price'])
-```
-
-
-```python
-# Transform extra_people column
-data['extra_people'] = data['extra_people'].str.replace('$', '')
-data['extra_people'] = data['extra_people'].str.replace(',', '')
-data['extra_people'] = pd.to_numeric(data['extra_people'])
-```
-
-The next step is to shuffle the `data` dataframe to ensure a good distribution for the training and testing sets.
-
-
-```python
-from sklearn.utils import shuffle
-data = shuffle(data)
-```
-
-Let's have a last look at the `data` dataframe:
-
-
-```python
-data.iloc[0:6, 0:10]
-```
-
-
-
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>host_total_listings_count</th>
-      <th>neighbourhood_cleansed</th>
-      <th>zipcode</th>
-      <th>latitude</th>
-      <th>longitude</th>
-      <th>property_type</th>
-      <th>room_type</th>
-      <th>accommodates</th>
-      <th>bathrooms</th>
-      <th>bedrooms</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>20958</th>
-      <td>1.0</td>
-      <td>Wandsworth</td>
-      <td>SW17</td>
-      <td>51.427419</td>
-      <td>-0.155608</td>
-      <td>House</td>
-      <td>Entire home/apt</td>
-      <td>4</td>
-      <td>1.0</td>
-      <td>2.0</td>
-    </tr>
-    <tr>
-      <th>25318</th>
-      <td>2.0</td>
-      <td>Kensington and Chelsea</td>
-      <td>W11</td>
-      <td>51.515430</td>
-      <td>-0.201153</td>
-      <td>Apartment</td>
-      <td>Entire home/apt</td>
-      <td>4</td>
-      <td>1.0</td>
-      <td>2.0</td>
-    </tr>
-    <tr>
-      <th>18207</th>
-      <td>1.0</td>
-      <td>Merton</td>
-      <td>SW19</td>
-      <td>51.420534</td>
-      <td>-0.196860</td>
-      <td>House</td>
-      <td>Entire home/apt</td>
-      <td>6</td>
-      <td>3.0</td>
-      <td>4.0</td>
-    </tr>
-    <tr>
-      <th>10547</th>
-      <td>4.0</td>
-      <td>Lambeth</td>
-      <td>SW2</td>
-      <td>51.461984</td>
-      <td>-0.127700</td>
-      <td>House</td>
-      <td>Private room</td>
-      <td>2</td>
-      <td>1.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <th>3826</th>
-      <td>3.0</td>
-      <td>Brent</td>
-      <td>NW9</td>
-      <td>51.575707</td>
-      <td>-0.264752</td>
-      <td>House</td>
-      <td>Private room</td>
-      <td>2</td>
-      <td>1.0</td>
-      <td>1.0</td>
-    </tr>
-    <tr>
-      <th>43315</th>
-      <td>4.0</td>
-      <td>Islington</td>
-      <td>EC1V</td>
-      <td>51.526539</td>
-      <td>-0.091483</td>
-      <td>Apartment</td>
-      <td>Entire home/apt</td>
-      <td>4</td>
-      <td>2.0</td>
-      <td>2.0</td>
-    </tr>
-  </tbody>
-</table>
-
-
-
-
-```python
-data.iloc[0:6, 11:22]
-```
-
-
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>bed_type</th>
-      <th>price</th>
-      <th>guests_included</th>
-      <th>extra_people</th>
-      <th>minimum_nights</th>
-      <th>maximum_nights</th>
-      <th>availability_365</th>
-      <th>instant_bookable</th>
-      <th>cancellation_policy</th>
-      <th>require_guest_profile_picture</th>
-      <th>require_guest_phone_verification</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>20958</th>
-      <td>Real Bed</td>
-      <td>100.0</td>
-      <td>1</td>
-      <td>0.0</td>
-      <td>3</td>
-      <td>1125</td>
-      <td>0</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>25318</th>
-      <td>Real Bed</td>
-      <td>140.0</td>
-      <td>2</td>
-      <td>0.0</td>
-      <td>3</td>
-      <td>1125</td>
-      <td>89</td>
-      <td>f</td>
-      <td>moderate</td>
-      <td>f</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>18207</th>
-      <td>Real Bed</td>
-      <td>179.0</td>
-      <td>1</td>
-      <td>0.0</td>
-      <td>5</td>
-      <td>1125</td>
-      <td>38</td>
-      <td>f</td>
-      <td>strict</td>
-      <td>f</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>10547</th>
-      <td>Futon</td>
-      <td>35.0</td>
-      <td>1</td>
-      <td>10.0</td>
-      <td>2</td>
-      <td>1125</td>
-      <td>238</td>
-      <td>f</td>
-      <td>moderate</td>
-      <td>f</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>3826</th>
-      <td>Real Bed</td>
-      <td>25.0</td>
-      <td>1</td>
-      <td>5.0</td>
-      <td>3</td>
-      <td>31</td>
-      <td>89</td>
-      <td>f</td>
-      <td>flexible</td>
-      <td>f</td>
-      <td>f</td>
-    </tr>
-    <tr>
-      <th>43315</th>
-      <td>Real Bed</td>
-      <td>180.0</td>
-      <td>1</td>
-      <td>0.0</td>
-      <td>3</td>
-      <td>1125</td>
-      <td>6</td>
-      <td>t</td>
-      <td>strict</td>
-      <td>f</td>
-      <td>f</td>
-    </tr>
-  </tbody>
-</table>
-
-
-## One Hot Encoding for Categorical Features <a name="one_hot"></a>
-
+### One Hot Encoding for Categorical Features 
 Categorical variables need to be One Hot Encoded in order to be converted into several numerical features and used in a Machine Learning model. This method is very well explained in this Kaggle notebook: https://www.kaggle.com/dansbecker/using-categorical-data-with-one-hot-encoding.
 
 
 ```python
 # One Hot Encoding for categorical variables
-data = pd.get_dummies(data)
+listings_processed = pd.get_dummies(listings_processed)
+listings_processed.shape
 ```
 
 
-```python
-print(data.shape)
-```
 
-    (46976, 193)
-    
 
-## Data Splitting: Features / labels - Training set / testing set <a name="data_split"></a>
+    (48247, 171)
 
-I then split my dataframe into features and labels and training and testing sets.
+
+
+### Data Splitting: Features / labels - Training set / testing set
+Now we split into into features and labels and training and testing sets. We also convert the train and test dataframe into numpy arrays so that they can be used to train and test the models.
 
 
 ```python
+# Shuffle the data to ensure a good distribution for the training and testing sets
+from sklearn.utils import shuffle
+listings_processed = shuffle(listings_processed)
+
 # Extract features and labels
-y = data['price']
-X = data.drop('price', axis = 1)
+y = listings_processed['price']
+X = listings_processed.drop('price', axis = 1)
 
 # Training and Testing Sets
 from sklearn.model_selection import train_test_split
 train_X, test_X, train_y, test_y = train_test_split(X, y, random_state = 0)
-```
 
-## Numpy Arrays Transformation <a name="numpy_array"></a>
-
-I convert the `train` and `test` dataframe into numpy arrays so that they can be used to train and test the models.
-
-
-```python
-import numpy as np
 train_X = np.array(train_X)
 test_X = np.array(test_X)
 train_y = np.array(train_y)
 test_y = np.array(test_y)
-```
 
-
-```python
 train_X.shape, test_X.shape
 ```
 
 
 
 
-    ((35232, 192), (11744, 192))
-    
+    ((36185, 170), (12062, 170))
 
-# Modelling <a name="modelling"></a>
 
-Now that the data preprocessing is over, I can start the second part of this work: applying different Machine Learning models.
-As a reminder, I decided to apply 3 different models:
-* **Random Forest**, with the RandomForestRegressor from the Scikit-learn library
-* **Gradient Boosting** method, with the XGBRegressor from the XGBoost library
-* **Neural Network**, with the MLPRegressor from the Scikit-learn library.
 
-Each time, I applied the model with its default hyperparameters and I then tuned the model in order to get the best hyperparameters I could. The metrics I use to evaluate the models is the **median absolute error** due to the presence of extreme outliers and skewness in the data set.
+## Modelling 
+
+Now that the data preprocessing is over, I can start the second part of this work: applying different Machine Learning models. We decided to apply 3 different models:
+
+* Random Forest, with the RandomForestRegressor from the Scikit-learn library
+* Gradient Boosting method, with the XGBRegressor from the XGBoost library
+* Neural Network, with the MLPRegressor from the Scikit-learn library.
+
+Each time, we applied the model with its default hyperparameters and we then tuned the model in order to get the best hyperparameters. The metrics we use to evaluate the models is the median absolute error due to the presence of extreme outliers and skewness in the data set.
+
+### Application of the Random Forest Regressor 
 
 Let's start with the Random Forest model.
 
-## Application of the Random Forest Regressor <a name="RF"></a>
+#### With default hyperparameters
+##### Creation of the pipeline
 
-As I said, the first algorithm I apply is a Random Forest regressor with the default hyperparameters.
-
-### With default hyperparameters <a name="RF_def"></a>
-
-#### Creation of the pipeline
-
-I create a pipeline that first imputes the missing values, then scales the data and finally applies the model. I then fit this pipeline to the training set.
+We first create a pipeline that imputes the missing values then scales the data and finally applies the model. We then fit this pipeline to the training set.
 
 
 ```python
@@ -2242,109 +1310,231 @@ my_pipeline_RF = make_pipeline(Imputer(), StandardScaler(),
 my_pipeline_RF.fit(train_X, train_y)
 ```
 
+    C:\Anaconda3\lib\site-packages\sklearn\ensemble\weight_boosting.py:29: DeprecationWarning: numpy.core.umath_tests is an internal NumPy module and should not be imported. It will be removed in a future NumPy release.
+      from numpy.core.umath_tests import inner1d
+    
 
-#### Evaluation of the model
 
-I evaluate this model on my testing set. As I mentioned above, I use the median absolute error to measure the performance of my model, which is interpretable in dollars. I also decide to have a look at the root-mean-square error (RMSE).
 
-I create the `evaluate_model` function that will evaluate the performance of my different models through this post.
+
+    Pipeline(memory=None,
+         steps=[('imputer', Imputer(axis=0, copy=True, missing_values='NaN', strategy='mean', verbose=0)), ('standardscaler', StandardScaler(copy=True, with_mean=True, with_std=True)), ('randomforestregressor', RandomForestRegressor(bootstrap=True, criterion='mse', max_depth=None,
+               max_features='au...estimators=10, n_jobs=1,
+               oob_score=False, random_state=42, verbose=0, warm_start=False))])
+
+
+
+##### Evaluation of the model
+
+We evaluate this model on the test set, using the median absolute error to measure the performance of the model. We'll also include the root-mean-square error (RMSE) for completeness. Since we'll be doing this repeatedly it is good practice to create a function.
 
 
 ```python
+from sklearn.metrics import median_absolute_error
+from sklearn.metrics import mean_squared_error
+from math import sqrt
+
 def evaluate_model(model, predict_set, evaluate_set):
     predictions = model.predict(predict_set)
-    from sklearn.metrics import median_absolute_error
     print("Median Absolute Error: " + str(round(median_absolute_error(predictions, evaluate_set), 2))) 
-    from sklearn.metrics import mean_squared_error
-    from math import sqrt
     RMSE = round(sqrt(mean_squared_error(predictions, evaluate_set)), 2)
     print("RMSE: " + str(RMSE)) 
 ```
 
 
 ```python
-result_RF_test = evaluate_model(my_pipeline_RF, test_X, test_y)
+evaluate_model(my_pipeline_RF, test_X, test_y)
 ```
 
-    Median Absolute Error: 14.3
-    RMSE: 69.39
+    Median Absolute Error: 14.2
+    RMSE: 126.16
     
 
-I decide to evaluate the model on the training set too, to be sure that I have avoided overfitting.
+We evaluate the model on the training set too, to be sure that we have avoided overfitting.
 
 
 ```python
-result_RF_train = evaluate_model(my_pipeline_RF, train_X, train_y)
-result_RF_train
+evaluate_model(my_pipeline_RF, train_X, train_y)
 ```
 
-    Median Absolute Error: 5.0
-    RMSE: 40.78
+    Median Absolute Error: 5.1
+    RMSE: 31.43
     
 
-These first results are quite good. To be sure that I have made a good feature selection I decide to have a look at the feature importances which is available with the Random Forest regressor.
+These first results are quite good. To be sure we have made a good feature selection we can have a look at the feature importances.
 
 
 ```python
-# Get numerical feature importances
-importances = list(my_pipeline_RF.steps[2][1].feature_importances_)
-# List of tuples with variable and importance
-feature_list = list(data.columns.drop("price"))
-feature_importances = [(feature, round(importance, 2)) for feature, importance in zip(feature_list, importances)]
-# Sort the feature importances by most important first
-feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
-# Print out the feature and importances 
-[print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances[0:22]]
+importances = my_pipeline_RF.steps[2][1].feature_importances_
+feature_importances = pd.DataFrame({"feature":X.columns.values, "importance":importances})
+feature_importances.sort_values("importance", ascending=False).head(22)
 ```
 
-    Variable: bedrooms             Importance: 0.18
-    Variable: bathrooms            Importance: 0.14
-    Variable: availability_365     Importance: 0.11
-    Variable: maximum_nights       Importance: 0.07
-    Variable: latitude             Importance: 0.06
-    Variable: neighbourhood_cleansed_Westminster Importance: 0.05
-    Variable: accommodates         Importance: 0.04
-    Variable: property_type_Other  Importance: 0.04
-    Variable: longitude            Importance: 0.03
-    Variable: minimum_nights       Importance: 0.03
-    Variable: zipcode_NW1          Importance: 0.03
-    Variable: room_type_Entire home/apt Importance: 0.03
-    Variable: host_total_listings_count Importance: 0.02
-    Variable: zipcode_SW1P         Importance: 0.02
-    Variable: zipcode_SW1W         Importance: 0.02
-    Variable: beds                 Importance: 0.01
-    Variable: guests_included      Importance: 0.01
-    Variable: extra_people         Importance: 0.01
-    Variable: neighbourhood_cleansed_Islington Importance: 0.01
-    Variable: neighbourhood_cleansed_Kensington and Chelsea Importance: 0.01
-    Variable: zipcode_E8           Importance: 0.01
-    Variable: zipcode_SW3          Importance: 0.01
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>feature</th>
+      <th>importance</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>5</th>
+      <td>bedrooms</td>
+      <td>0.222978</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>bathrooms</td>
+      <td>0.152850</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>longitude</td>
+      <td>0.092258</td>
+    </tr>
+    <tr>
+      <th>143</th>
+      <td>property_type_Other</td>
+      <td>0.048795</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>availability_365</td>
+      <td>0.048298</td>
+    </tr>
+    <tr>
+      <th>0</th>
+      <td>host_total_listings_count</td>
+      <td>0.045807</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>latitude</td>
+      <td>0.044980</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>minimum_nights</td>
+      <td>0.042580</td>
+    </tr>
+    <tr>
+      <th>151</th>
+      <td>room_type_Entire home/apt</td>
+      <td>0.034680</td>
+    </tr>
+    <tr>
+      <th>115</th>
+      <td>zipcode_W2</td>
+      <td>0.032714</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>beds</td>
+      <td>0.028690</td>
+    </tr>
+    <tr>
+      <th>126</th>
+      <td>property_type_Bed &amp; Breakfast</td>
+      <td>0.025004</td>
+    </tr>
+    <tr>
+      <th>25</th>
+      <td>neighbourhood_cleansed_Kensington and Chelsea</td>
+      <td>0.023937</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>accommodates</td>
+      <td>0.022499</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>extra_people</td>
+      <td>0.011791</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>maximum_nights</td>
+      <td>0.010378</td>
+    </tr>
+    <tr>
+      <th>127</th>
+      <td>property_type_Boat</td>
+      <td>0.010334</td>
+    </tr>
+    <tr>
+      <th>36</th>
+      <td>neighbourhood_cleansed_Westminster</td>
+      <td>0.009279</td>
+    </tr>
+    <tr>
+      <th>92</th>
+      <td>zipcode_SW1</td>
+      <td>0.007731</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>guests_included</td>
+      <td>0.007161</td>
+    </tr>
+    <tr>
+      <th>28</th>
+      <td>neighbourhood_cleansed_Merton</td>
+      <td>0.006098</td>
+    </tr>
+    <tr>
+      <th>94</th>
+      <td>zipcode_SW3</td>
+      <td>0.003550</td>
+    </tr>
+  </tbody>
+</table>
+</div>
 
 
 
 
 ```python
-# List of features sorted from most to least important
-sorted_importances = [importance[1] for importance in feature_importances]
-
 # Cumulative importances
-cumulative_importances = sum(sorted_importances)
-
-print(cumulative_importances)
+feature_importances.importance.sum()
 ```
 
-    0.9400000000000004
-    
 
-### Hyperparameters tuning <a name="RF_tuned"></a>
 
-I had some good results with the default hyperparameters of the Random Forest regressor. But I can improve the results with some hyperparameter tuning. There are two main methods available for this:
+
+    1.0
+
+
+
+#### Hyperparameters tuning
+
+We had some good results with the default hyperparameters of the Random Forest regressor. But we can improve the results with some hyperparameter tuning. There are two main methods available for this:
+
 * Random search
 * Grid search.
 
 You have to provide a parameter grid to these methods. Then, they both try different combinations of parameters within the grid you provided. But the first one only tries several combinations whereas the second one tries all the possible combinations with the grid you provided.
 
-What I have done is that I started with a random search to roughly evaluate a good combination of parameters. Once this is done, I use the grid search to get more precise results.
+What we have done is that we started with a random search to roughly evaluate a good combination of parameters. Once this is done, we use the grid search to get more precise results.
 
 
 ```python
@@ -2402,9 +1592,7 @@ pprint(my_pipeline_RF.get_params())
                oob_score=False, random_state=42, verbose=0, warm_start=False))]}
     
 
-#### Randomized Search with Cross Validation <a name="RF_random_search"></a>
-
-##### Creation of the parameter grid
+##### Randomized Search with Cross Validation 
 
 
 ```python
@@ -2430,36 +1618,11 @@ random_grid = {'randomforestregressor__n_estimators': n_estimators,
                'randomforestregressor__min_samples_split': min_samples_split,
                'randomforestregressor__min_samples_leaf': min_samples_leaf,
                'randomforestregressor__bootstrap': bootstrap}
-
-from pprint import pprint
-pprint(random_grid)
-
 ```
-
-    {'randomforestregressor__bootstrap': [True, False],
-     'randomforestregressor__max_depth': [10, 35, 60, 85, 110, None],
-     'randomforestregressor__max_features': ['auto', 'sqrt'],
-     'randomforestregressor__min_samples_leaf': [1, 2, 4],
-     'randomforestregressor__min_samples_split': [2, 5, 10],
-     'randomforestregressor__n_estimators': [10,
-                                             109,
-                                             208,
-                                             307,
-                                             406,
-                                             505,
-                                             604,
-                                             703,
-                                             802,
-                                             901,
-                                             1000]}
-    
-
-##### Search for best hyperparameters
 
 
 ```python
 # Use the random grid to search for best hyperparameters
-
 from sklearn.model_selection import RandomizedSearchCV
 
 # Random search of parameters, using 2 fold cross validation, 
@@ -2469,35 +1632,32 @@ rf_random = RandomizedSearchCV(estimator = my_pipeline_RF,
                                n_iter = 50, cv = 2, verbose=2,
                                random_state = 42, n_jobs = -1, 
                                scoring = 'neg_median_absolute_error')
-
-```    
-
-
-```python
 # Fit our model
 rf_random.fit(train_X, train_y)
-```
 
-
-```python
 rf_random.best_params_
 ```
+
+    Fitting 2 folds for each of 50 candidates, totalling 100 fits
+    
+
+    [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 31.4min
+    [Parallel(n_jobs=-1)]: Done 100 out of 100 | elapsed: 429.1min finished
+    
 
 
 
 
     {'randomforestregressor__bootstrap': True,
-     'randomforestregressor__max_depth': 85,
+     'randomforestregressor__max_depth': 35,
      'randomforestregressor__max_features': 'auto',
-     'randomforestregressor__min_samples_leaf': 1,
-     'randomforestregressor__min_samples_split': 2,
-     'randomforestregressor__n_estimators': 802}
+     'randomforestregressor__min_samples_leaf': 2,
+     'randomforestregressor__min_samples_split': 5,
+     'randomforestregressor__n_estimators': 1000}
 
 
 
-#### Grid Search with Cross Validation <a name="RF_grid_search"></a>
-
-##### Creation of the parameter grid
+##### Grid Search with Cross Validation 
 
 
 ```python
@@ -2505,115 +1665,78 @@ from sklearn.model_selection import GridSearchCV
 # Create the parameter grid based on the results of random search 
 param_grid = {
     'randomforestregressor__bootstrap': [True],
-    'randomforestregressor__max_depth': [80, 85, 90], 
+    'randomforestregressor__max_depth': [30, 35, 40], 
     'randomforestregressor__max_features': ['auto'],
-    'randomforestregressor__min_samples_leaf': [1],
-    'randomforestregressor__min_samples_split': [2, 4],
-    'randomforestregressor__n_estimators': [780, 800, 820] 
+    'randomforestregressor__min_samples_leaf': [2],
+    'randomforestregressor__min_samples_split': [4, 5, 6],
+    'randomforestregressor__n_estimators': [950, 1000, 1050] 
 }
-```
-    
 
-##### Search for best hyperparameters
-
-
-```python
 # Instantiate the grid search model
 grid_search = GridSearchCV(estimator = my_pipeline_RF, 
                            param_grid = param_grid, 
                            cv = 3, n_jobs = -1, verbose = 2, 
                            scoring = 'neg_median_absolute_error')
-```
-    
 
-
-```python
 # Fit the grid search to the data
 grid_search.fit(train_X, train_y)
-```
 
-
-```python
 grid_search.best_params_
 ```
+
+    Fitting 3 folds for each of 27 candidates, totalling 81 fits
+    
+
+    [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 114.4min
+    [Parallel(n_jobs=-1)]: Done  81 out of  81 | elapsed: 262.8min finished
+    
 
 
 
 
     {'randomforestregressor__bootstrap': True,
-     'randomforestregressor__max_depth': 80,
+     'randomforestregressor__max_depth': 30,
      'randomforestregressor__max_features': 'auto',
-     'randomforestregressor__min_samples_leaf': 1,
-     'randomforestregressor__min_samples_split': 2,
-     'randomforestregressor__n_estimators': 820}
+     'randomforestregressor__min_samples_leaf': 2,
+     'randomforestregressor__min_samples_split': 4,
+     'randomforestregressor__n_estimators': 1050}
 
 
+
+##### Final Model
 
 
 ```python
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Imputer
-from sklearn.preprocessing import StandardScaler
-
 # Create the pipeline (imputer + scaler + regressor)
 my_pipeline_RF_grid = make_pipeline(Imputer(), StandardScaler(),
                                       RandomForestRegressor(random_state=42,
                                                             bootstrap = True,
-                                                            max_depth = 80,
+                                                            max_depth = 30,
                                                             max_features = 'auto',
-                                                            min_samples_leaf = 1,
-                                                            min_samples_split = 2,
-                                                            n_estimators = 820))
+                                                            min_samples_leaf = 2,
+                                                            min_samples_split = 4,
+                                                            n_estimators = 1050))
 
 # Fit the model
 my_pipeline_RF_grid.fit(train_X, train_y)
+
+evaluate_model(my_pipeline_RF_grid, test_X, test_y)
 ```
 
-
-
-##### Evaluation of the model
-
-Now let's evaluate the tuned model.
-
-
-```python
-result_RF_tuned_test = evaluate_model(my_pipeline_RF_grid, test_X, test_y)
-result_RF_tuned_test
-```
-
-    Median Absolute Error: 13.58
-    RMSE: 79.18
+    Median Absolute Error: 13.57
+    RMSE: 125.04
     
 
+We get better results with the tuned model than with default hyperparameters, but the improvement of the median absolute error is not amazing. Maybe we will have a better precision if we use another model.
 
-```python
-result_RF_test = evaluate_model(my_pipeline_RF, test_X, test_y)
-```
-
-    Median Absolute Error: 14.3
-    RMSE: 69.39
-    
-
-I get better results with the tuned model than with default hyperparameters, but the improvement of the median absolute error is not amazing. Maybe I will have a better precision if I use another model.
-
-
-
-## Application of the Gradient Boosting Regressor <a name="XGB"></a>
+### Application of the Gradient Boosting Regressor
 
 Let's try with the XGBoost gradient boosting model. This model often produces really good results in Kaggle competitions. The first step is to use it with the default hyperparameters.
-
-### With default hyperparameters <a name="XGB_def"></a>
-
-#### Creation of the pipeline
+#### With default hyperparameters 
 
 
 ```python
 from xgboost import XGBRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Imputer
-# Multi-layer Perceptron is sensitive to feature scaling, so it is highly recommended to scale your data
-from sklearn.preprocessing import StandardScaler
 
 # Create the pipeline: Imputation + Scale + MLP regressor
 my_pipeline_XGB = make_pipeline(Imputer(), StandardScaler(), 
@@ -2621,35 +1744,20 @@ my_pipeline_XGB = make_pipeline(Imputer(), StandardScaler(),
 
 # Fit the model
 my_pipeline_XGB.fit(train_X, train_y)
-```
-    
 
-#### Evaluation of the model
-
-```python
-result_XGB_test = evaluate_model(my_pipeline_XGB, test_X, test_y)
+evaluate_model(my_pipeline_XGB, test_X, test_y)
 ```
 
-    Median Absolute Error: 15.87
-    RMSE: 57.24
-    
-
-
-```python
-result_XGB_train = evaluate_model(my_pipeline_XGB, train_X, train_y)
-```
-
-    Median Absolute Error: 16.11
-    RMSE: 71.87
+    Median Absolute Error: 15.94
+    RMSE: 120.88
     
 
 For the moment, the tuned and even not tuned Random Forest models give better results. I want to see if hyperparameter tuning will make this model better than the Random Forest one.
 
-### Hyperparameters tuning
+#### Hyperparameters tuning
 
 
 ```python
-from pprint import pprint
 # Look at parameters used by our current model
 print('Parameters currently used:\n')
 pprint(my_pipeline_XGB.get_params())
@@ -2708,113 +1816,74 @@ pprint(my_pipeline_XGB.get_params())
      'xgbregressor__subsample': 1}
     
 
-#### Grid Search with Cross Validation <a name="XGB_grid_search"></a>
-
-##### Creation of the parameter grid
+#### Grid Search with Cross Validation 
 
 
 ```python
-from sklearn.model_selection import GridSearchCV
-# Create the parameter grid based on the results of random search 
 param_grid = {'xgbregressor__learning_rate': [0.1, 0.05], 
               'xgbregressor__max_depth': [5, 7, 9],
               'xgbregressor__n_estimators': [100, 500, 900]}
-```
-    
 
-##### Search for best hyperparameters
-
-
-```python
 # Instantiate the grid search model
 grid_search = GridSearchCV(estimator = my_pipeline_XGB,
                            param_grid = param_grid, 
                            cv = 3, n_jobs = -1, verbose = 2, 
                            scoring = 'neg_median_absolute_error')
 
-```
-    
-
-
-```python
 # Fit the grid search to the data
 grid_search.fit(train_X, train_y)
-```
 
-
-```python
 grid_search.best_params_
 ```
+
+    Fitting 3 folds for each of 18 candidates, totalling 54 fits
+    
+
+    [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 27.0min
+    [Parallel(n_jobs=-1)]: Done  54 out of  54 | elapsed: 48.5min finished
+    
 
 
 
 
     {'xgbregressor__learning_rate': 0.05,
      'xgbregressor__max_depth': 9,
-     'xgbregressor__n_estimators': 900}
+     'xgbregressor__n_estimators': 500}
 
 
+
+#### Final Model
 
 
 ```python
-from xgboost import XGBRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Imputer
-# Multi-layer Perceptron is sensitive to feature scaling, so it is highly recommended to scale your data
-from sklearn.preprocessing import StandardScaler
-
 # Create the pipeline: Imputation + Scale + MLP regressor
 my_pipeline_XGB_grid = make_pipeline(Imputer(), StandardScaler(), 
                                      XGBRegressor(random_state = 42,
                                                   learning_rate = 0.05,
                                                   max_depth = 9,
-                                                  n_estimators = 900))
+                                                  n_estimators = 500))
 
 # Fit the model
 my_pipeline_XGB_grid.fit(train_X, train_y)
-```
-    
 
-##### Evaluation of the model
-
-
-```python
-result_XGB_tuned_test = evaluate_model(my_pipeline_XGB_grid, test_X, test_y)
+evaluate_model(my_pipeline_XGB_grid, test_X, test_y)
 ```
 
-    Median Absolute Error: 13.48
-    RMSE: 95.86
+    Median Absolute Error: 13.54
+    RMSE: 120.78
     
 
+The tuned XGBoost model gives better results than the not tuned one. It also gives almost the same results as the tuned Random Forest model (MAE: 13.57).
 
-```python
-result_XGB_tuned_train = evaluate_model(my_pipeline_XGB_grid, train_X, train_y)
-```
-
-    Median Absolute Error: 8.69
-    RMSE: 20.15
-    
-
-The tuned XGBoost model gives better results than the not tuned one, for both the testing and training sets. It also gives almost the same results as the tuned Random Forest model (MAE: 13.58).
-
-
-
-## Application of the Multi Layer Perceptron Regressor <a name="MLP"></a>
-
+### Application of the Multi Layer Perceptron Regressor
 
 Now let's try a Neural Network, or to be more precise, a multilayer perceptron which is a class of Neural Network. I apply this regressor with default hyperparameters except from the maximum numer of iteration in order to let it run until the end.
 
-### With default hyperparameters <a name="MLP_def"></a>
-
-#### Creation of the pipeline
+#### With default hyperparameters 
 
 
 ```python
 from sklearn.neural_network import MLPRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Imputer
-# Multi-layer Perceptron is sensitive to feature scaling, so it is highly recommended to scale your data
-from sklearn.preprocessing import StandardScaler
 
 # Create the pipeline: Imputation + Scale + Feature Selection + MLP regressor
 my_pipeline_NN = make_pipeline(Imputer(), StandardScaler(), 
@@ -2823,32 +1892,17 @@ my_pipeline_NN = make_pipeline(Imputer(), StandardScaler(),
 
 # Fit the model
 my_pipeline_NN.fit(train_X, train_y)
+
+evaluate_model(my_pipeline_NN, test_X, test_y)
 ```
 
-
-
-#### Evaluation of the model
-
-```python
-result_NN_test = evaluate_model(my_pipeline_NN, test_X, test_y)
-```
-
-    Median Absolute Error: 19.31
-    RMSE: 68.52
-    
-
-
-```python
-result_NN_train = evaluate_model(my_pipeline_NN, train_X, train_y)
-```
-
-    Median Absolute Error: 16.34
-    RMSE: 76.49
+    Median Absolute Error: 18.76
+    RMSE: 124.0
     
 
 The results are not very good compared to the two previous models. Let's try to tune this neural network, maybe the default parameters are very not good for this data.
 
-### Hyperparameters tuning <a name="MLP_tuned"></a>
+#### Grid Search with Cross Validation 
 
 
 ```python
@@ -2871,7 +1925,7 @@ my_pipeline_NN.get_params()
             hidden_layer_sizes=(100,), learning_rate='constant',
             learning_rate_init=0.001, max_iter=400, momentum=0.9,
             nesterovs_momentum=True, power_t=0.5, random_state=42, shuffle=True,
-            solver='adam', tol=0.0001, validation_fraction=0.1, verbose=True,
+            solver='adam', tol=0.0001, validation_fraction=0.1, verbose=False,
             warm_start=False),
      'mlpregressor__activation': 'relu',
      'mlpregressor__alpha': 0.0001,
@@ -2892,7 +1946,7 @@ my_pipeline_NN.get_params()
      'mlpregressor__solver': 'adam',
      'mlpregressor__tol': 0.0001,
      'mlpregressor__validation_fraction': 0.1,
-     'mlpregressor__verbose': True,
+     'mlpregressor__verbose': False,
      'mlpregressor__warm_start': False,
      'standardscaler': StandardScaler(copy=True, with_mean=True, with_std=True),
      'standardscaler__copy': True,
@@ -2907,21 +1961,13 @@ my_pipeline_NN.get_params()
               hidden_layer_sizes=(100,), learning_rate='constant',
               learning_rate_init=0.001, max_iter=400, momentum=0.9,
               nesterovs_momentum=True, power_t=0.5, random_state=42, shuffle=True,
-              solver='adam', tol=0.0001, validation_fraction=0.1, verbose=True,
+              solver='adam', tol=0.0001, validation_fraction=0.1, verbose=False,
               warm_start=False))]}
 
 
 
-I did a random search before the grid search but I decided not to include it in the notebook to make it more concise and clearer.
-
-#### Grid Search with Cross Validation <a name="MLP_grid_search"></a>
-
-##### Creation of the parameter grid
-
 
 ```python
-from sklearn.model_selection import GridSearchCV
-# Create the parameter grid based on the results of random search 
 param_grid = {
     'mlpregressor__activation': ['logistic', 'tanh'],
     'mlpregressor__solver': ['sgd', 'adam'],
@@ -2929,120 +1975,92 @@ param_grid = {
     'mlpregressor__hidden_layer_sizes': [(100,), (100, 50), (100, 100), (100, 100, 100)],
     'mlpregressor__learning_rate_init': [0.001, 0.0001],
 }
-```
-    
 
-##### Search for best hyperparameters
-
-
-```python
-# Instantiate the grid search model
 grid_search = GridSearchCV(estimator = my_pipeline_NN,
                            param_grid = param_grid, 
                            cv = 3, n_jobs = -1, verbose = 2,
                            scoring = 'neg_median_absolute_error')
 
-```
-    
-
-
-```python
-# Fit the grid search to the data
 grid_search.fit(train_X, train_y)
-```
 
-
-
-```python
 grid_search.best_params_
 ```
+
+    Fitting 3 folds for each of 64 candidates, totalling 192 fits
+    
+
+    [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 696.1min
+    [Parallel(n_jobs=-1)]: Done 154 tasks      | elapsed: 797.8min
+    [Parallel(n_jobs=-1)]: Done 192 out of 192 | elapsed: 831.4min finished
+    C:\Anaconda3\lib\site-packages\sklearn\neural_network\multilayer_perceptron.py:564: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (400) reached and the optimization hasn't converged yet.
+      % self.max_iter, ConvergenceWarning)
+    
 
 
 
 
     {'mlpregressor__activation': 'logistic',
      'mlpregressor__early_stopping': False,
-     'mlpregressor__hidden_layer_sizes': (100, 100, 100),
+     'mlpregressor__hidden_layer_sizes': (100, 50),
      'mlpregressor__learning_rate_init': 0.0001,
-     'mlpregressor__solver': 'sgd'}
+     'mlpregressor__solver': 'adam'}
 
 
+
+#### Final Model
 
 
 ```python
-from sklearn.neural_network import MLPRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Imputer
-# Multi-layer Perceptron is sensitive to feature scaling, so it is highly recommended to scale your data
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_regression
-
 # Create the pipeline: imputation + MLP regressor
 my_pipeline_NN_grid = make_pipeline(Imputer(), StandardScaler(),
-                                    MLPRegressor(hidden_layer_sizes = (100, 100, 100),
+                                    MLPRegressor(hidden_layer_sizes = (100, 50),
                                                  activation = 'logistic',
                                                  early_stopping = False,
                                                  learning_rate_init = 0.0001,
-                                                 solver = 'sgd',
+                                                 solver = 'adam',
                                                  max_iter = 500,
                                                  random_state = 42)) 
 
 # Fit the model
 my_pipeline_NN_grid.fit(train_X, train_y)
+
+evaluate_model(my_pipeline_NN_grid, test_X, test_y)
 ```
 
-
-
-##### Evaluation of the model
-
-```python
-result_NN_tuned_test = evaluate_model(my_pipeline_NN_grid, test_X, test_y)
-```
-
-    Median Absolute Error: 14.79
-    RMSE: 71.08
+    Median Absolute Error: 15.23
+    RMSE: 129.49
     
 
-
-```python
-result_NN_test = evaluate_model(my_pipeline_NN, test_X, test_y)
-```
-
-    Median Absolute Error: 19.31
-    RMSE: 68.52
+    C:\Anaconda3\lib\site-packages\sklearn\neural_network\multilayer_perceptron.py:564: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (500) reached and the optimization hasn't converged yet.
+      % self.max_iter, ConvergenceWarning)
     
 
 The tuned Neural Network is much better than the one with default hyperparameters. However, it is still much less precise than the first two models.
 
-## Visualision of the models' performance <a name="conclusion"></a>
-
-In conclusion, here are the performance of the different models I applied:
+### Visualision of the models' performance
 
 
 ```python
-# Graph x and y axis values
-import numpy as np
-labels = np.array(['RF','Tuned RF','XGB', 'Tuned XGB', 'MLP', 'Tuned MLP'])
-error_val = np.array([14.3, 13.58, 15.87, 13.48, 19.31, 14.79])
-
-# Arrange bars
-pos = np.arange(error_val.shape[0])
-srt = np.argsort(error_val)
-
-# Plots Mean Absolute Variance bars across functions
-import matplotlib.pyplot as plt
+error_val = pd.DataFrame({'error_val':[14.2, 13.57, 15.94, 13.54, 18.76, 15.23]},
+                        index = ['RF','Tuned RF','XGB', 'Tuned XGB', 'MLP', 'Tuned MLP'])
+error_val = error_val.sort_values('error_val')
 plt.figure(figsize=(10,10))
-plt.bar(pos, error_val[srt], align = 'center', color='#E35A5C')
-plt.xticks(pos, labels[srt])
+ax = error_val.error_val.plot(kind='bar', align = 'center', color='#E35A5C')
+plt.xticks(rotation=0)
 plt.xlabel('Model')
 plt.ylabel('Median Absolute Error in $')
 plt.title('Median Absolute Error Model Comparison')
-plt.ylim(0,20)
 plt.show()
 ```
 
 
-![png](plots/output_31_0.png)
+![png](output_80_0.png)
 
 
-The **tuned Random Forest and XGBoost gave the best results on the testing set**. Surprisingly, the **Multi Layer Perceptron with default parameters gave me the smallest Median Absolute errors**, and the tuned one did not even give better results than the default Random Forest. This is unusual, maybe the Multi Layer Perceptron needs more data to perform better, or it might need more tuning on important hyperparameters such as the `hidden_layer_sizes`.
+The tuned Random Forest and XGBoost gave the best results on the test set. Surprisingly, the Multi Layer Perceptron with default parameters gave the highest Median Absolute errors, and the tuned one did not even give better results than the default Random Forest. This is unusual, maybe the Multi Layer Perceptron needs more data to perform better, or it might need more tuning on important hyperparameters such as the hidden_layer_sizes. 
+
+## Conclusion
+
+In this post we modelled Airbnb apartment prices using descriptive data from the airbnb website. First, we preprocessed the data to remove any redundant features and reduce the sparsity of the data. Then we applied three different algorithms, initially with default parameters which we then tuned. In our results the tuned Random Forest and tuned XGBoost performed best. 
+
+To further improve our models we could include more feature engineering, for example time-based features. We could also try more extensive hyperparameter tuning. If you would like to give it a go yourself, the code and data for this post can be found on [GitHub](https://github.com/MangoTheCat/Modelling-Airbnb-Prices#XGB)
