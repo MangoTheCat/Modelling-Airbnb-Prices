@@ -1,6 +1,6 @@
 
 # Modeling Airbnb prices
-In this post we're going to model the prices of Airbnb appartments in London. In other words, the aim is to build our own price suggestion model. We will be using data from http://insideairbnb.com/ which we collected in April 2018. This work is inspired from the [Airbnb price prediction model](https://d1no007.github.io/OptiBnB/) built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi.
+In this post we're going to model the prices of Airbnb appartments in London. In other words, the aim is to build our own price suggestion model. We will be using data from http://insideairbnb.com/ which we collected in April 2018. This work is inspired from the [Airbnb price prediction model](https://chasedavis.github.io/optibnb-1/) built by Dino Rodriguez, Chase Davis, and Ayomide Opeyemi.
 
 ## Data Preprocessing
 The first thing to do is to set the seed in order to be able to reproduce the results.
@@ -17,7 +17,7 @@ Then we import the listings gathered in the csv file.
 ```python
 import pandas as pd
 
-listings_file_path = 'listings.csv.gz' 
+listings_file_path = 'listings.csv.gz'
 listings = pd.read_csv(listings_file_path, compression="gzip", low_memory=False)
 listings.columns
 ```
@@ -104,7 +104,7 @@ listings.columns
 
 
 
-#### Selection on Missing Data 
+#### Selection on Missing Data
 Features that have a high number of missing values aren't useful for our model so we should remove them.
 
 
@@ -124,11 +124,11 @@ plt.show()
 ![png](output_10_0.png)
 
 
-As we can see, the features `neighbourhood_group_cleansed`, `square_feet`, `has_availability`, `license` and `jurisdiction_names` mostly have missing values. The features `neighbourhood`, `cleaning_fee` and `security_deposit` are more than 30% empty which is too much in our opinion. The `zipcode` feature also has some missing values but we can either remove these values or impute them within reasonable accuracy. 
+As we can see, the features `neighbourhood_group_cleansed`, `square_feet`, `has_availability`, `license` and `jurisdiction_names` mostly have missing values. The features `neighbourhood`, `cleaning_fee` and `security_deposit` are more than 30% empty which is too much in our opinion. The `zipcode` feature also has some missing values but we can either remove these values or impute them within reasonable accuracy.
 
 
 ```python
-useless = ['neighbourhood', 'neighbourhood_group_cleansed', 'square_feet', 'security_deposit', 'cleaning_fee', 
+useless = ['neighbourhood', 'neighbourhood_group_cleansed', 'square_feet', 'security_deposit', 'cleaning_fee',
            'has_availability', 'license', 'jurisdiction_names']
 listings.drop(useless, axis=1, inplace=True)
 ```
@@ -152,7 +152,7 @@ plt.show()
 ![png](output_14_0.png)
 
 
-We can see that the `street` and `amenities` features have a large number of unique values. It would require some natural language processing to properly wrangle these into useful features. We believe we have enough location information with `neighbourhood_cleansed` and `zipcode` so we'll remove `street`. We also remove `amenities`, `calendar_updated` and `calendar_last_updated` features as these are too complicated to process for the moment. 
+We can see that the `street` and `amenities` features have a large number of unique values. It would require some natural language processing to properly wrangle these into useful features. We believe we have enough location information with `neighbourhood_cleansed` and `zipcode` so we'll remove `street`. We also remove `amenities`, `calendar_updated` and `calendar_last_updated` features as these are too complicated to process for the moment.
 
 
 ```python
@@ -168,7 +168,7 @@ print("Number of Zipcodes:", listings['zipcode'].nunique())
 ```
 
     Number of Zipcodes: 24774
-    
+
 
 Indeed, there are too many zipcodes. If we leave this feature as is it might cause overfitting. Instead we can regroup the postcodes. At the moment, they are separated as in the following example: KT1 1PE. We'll keep the first part of the zipcode (e.g. KT1) and accept that this gives us some less precise location information.
 
@@ -180,7 +180,7 @@ print("Number of Zipcodes:", listings['zipcode'].nunique())
 ```
 
     Number of Zipcodes: 461
-    
+
 
 Now, I only have 461 different zipcodes, which is much better than before. Let's have a look at the data dataframe to be sure that the postcodes have the correct form.
 
@@ -399,7 +399,7 @@ print('Number of entries removed: ', listings.shape[0] - listings_zip_filtered.s
 
 
     Number of entries removed:  5484
-    
+
 
 This distribution is much better, and we only removed 5484 rows from our dataframe which contained about 53904 rows.
 
@@ -427,7 +427,7 @@ print("Number of Neighborhoods:", len(count_per_neighborhood))
 
 
     Number of Neighborhoods: 33
-    
+
 
 The distribution is fine and there are only 33 neighborhoods. But some only contain around 10 appartments and this is useless for our model so let's keep the neighborhoods that contain more than 100 appartments.
 
@@ -453,7 +453,7 @@ print('Number of entries removed: ', listings_zip_filtered.shape[0] - listings_n
 
 
     Number of entries removed:  173
-    
+
 
 By doing this, we only removed 173 rows. We still have more than 46000 rows in our data.
 
@@ -471,10 +471,10 @@ from sklearn import preprocessing
 # Output: array (array of encoded values)
 def encode_categorical(array):
     if not array.dtype == np.dtype('float64'):
-        return preprocessing.LabelEncoder().fit_transform(array) 
+        return preprocessing.LabelEncoder().fit_transform(array)
     else:
         return array
-    
+
 # Temporary dataframe
 temp_data = listings_neighborhood_filtered.copy()
 
@@ -1191,7 +1191,7 @@ corr_matrix
 
 
 ```python
-# Display heat map 
+# Display heat map
 plt.figure(figsize=(7, 7))
 plt.pcolor(corr_matrix, cmap='RdBu')
 plt.xlabel('Predictor Index')
@@ -1227,7 +1227,7 @@ listings_processed['extra_people'] = listings_processed['extra_people'].str.repl
 listings_processed['extra_people'] = pd.to_numeric(listings_processed['extra_people'])
 ```
 
-### One Hot Encoding for Categorical Features 
+### One Hot Encoding for Categorical Features
 Categorical variables need to be One Hot Encoded in order to be converted into several numerical features and used in a Machine Learning model. This method is very well explained in this Kaggle notebook: https://www.kaggle.com/dansbecker/using-categorical-data-with-one-hot-encoding.
 
 
@@ -1276,7 +1276,7 @@ train_X.shape, test_X.shape
 
 
 
-## Modelling 
+## Modelling
 
 Now that the data preprocessing is over, I can start the second part of this work: applying different Machine Learning models. We decided to apply 3 different models:
 
@@ -1286,7 +1286,7 @@ Now that the data preprocessing is over, I can start the second part of this wor
 
 Each time, we applied the model with its default hyperparameters and we then tuned the model in order to get the best hyperparameters. The metrics we use to evaluate the models is the median absolute error due to the presence of extreme outliers and skewness in the data set.
 
-### Application of the Random Forest Regressor 
+### Application of the Random Forest Regressor
 
 Let's start with the Random Forest model.
 
@@ -1312,7 +1312,7 @@ my_pipeline_RF.fit(train_X, train_y)
 
     C:\Anaconda3\lib\site-packages\sklearn\ensemble\weight_boosting.py:29: DeprecationWarning: numpy.core.umath_tests is an internal NumPy module and should not be imported. It will be removed in a future NumPy release.
       from numpy.core.umath_tests import inner1d
-    
+
 
 
 
@@ -1336,9 +1336,9 @@ from math import sqrt
 
 def evaluate_model(model, predict_set, evaluate_set):
     predictions = model.predict(predict_set)
-    print("Median Absolute Error: " + str(round(median_absolute_error(predictions, evaluate_set), 2))) 
+    print("Median Absolute Error: " + str(round(median_absolute_error(predictions, evaluate_set), 2)))
     RMSE = round(sqrt(mean_squared_error(predictions, evaluate_set)), 2)
-    print("RMSE: " + str(RMSE)) 
+    print("RMSE: " + str(RMSE))
 ```
 
 
@@ -1348,7 +1348,7 @@ evaluate_model(my_pipeline_RF, test_X, test_y)
 
     Median Absolute Error: 14.2
     RMSE: 126.16
-    
+
 
 We evaluate the model on the training set too, to be sure that we have avoided overfitting.
 
@@ -1359,7 +1359,7 @@ evaluate_model(my_pipeline_RF, train_X, train_y)
 
     Median Absolute Error: 5.1
     RMSE: 31.43
-    
+
 
 These first results are quite good. To be sure we have made a good feature selection we can have a look at the feature importances.
 
@@ -1545,7 +1545,7 @@ pprint(my_pipeline_RF.get_params())
 ```
 
     Parameters currently used:
-    
+
     {'imputer': Imputer(axis=0, copy=True, missing_values='NaN', strategy='mean', verbose=0),
      'imputer__axis': 0,
      'imputer__copy': True,
@@ -1590,9 +1590,9 @@ pprint(my_pipeline_RF.get_params())
                min_samples_leaf=1, min_samples_split=2,
                min_weight_fraction_leaf=0.0, n_estimators=10, n_jobs=1,
                oob_score=False, random_state=42, verbose=0, warm_start=False))]}
-    
 
-##### Randomized Search with Cross Validation 
+
+##### Randomized Search with Cross Validation
 
 
 ```python
@@ -1625,12 +1625,12 @@ random_grid = {'randomforestregressor__n_estimators': n_estimators,
 # Use the random grid to search for best hyperparameters
 from sklearn.model_selection import RandomizedSearchCV
 
-# Random search of parameters, using 2 fold cross validation, 
+# Random search of parameters, using 2 fold cross validation,
 # search across 100 different combinations, and use all available cores
-rf_random = RandomizedSearchCV(estimator = my_pipeline_RF, 
-                               param_distributions = random_grid, 
+rf_random = RandomizedSearchCV(estimator = my_pipeline_RF,
+                               param_distributions = random_grid,
                                n_iter = 50, cv = 2, verbose=2,
-                               random_state = 42, n_jobs = -1, 
+                               random_state = 42, n_jobs = -1,
                                scoring = 'neg_median_absolute_error')
 # Fit our model
 rf_random.fit(train_X, train_y)
@@ -1639,11 +1639,11 @@ rf_random.best_params_
 ```
 
     Fitting 2 folds for each of 50 candidates, totalling 100 fits
-    
+
 
     [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 31.4min
     [Parallel(n_jobs=-1)]: Done 100 out of 100 | elapsed: 429.1min finished
-    
+
 
 
 
@@ -1657,25 +1657,25 @@ rf_random.best_params_
 
 
 
-##### Grid Search with Cross Validation 
+##### Grid Search with Cross Validation
 
 
 ```python
 from sklearn.model_selection import GridSearchCV
-# Create the parameter grid based on the results of random search 
+# Create the parameter grid based on the results of random search
 param_grid = {
     'randomforestregressor__bootstrap': [True],
-    'randomforestregressor__max_depth': [30, 35, 40], 
+    'randomforestregressor__max_depth': [30, 35, 40],
     'randomforestregressor__max_features': ['auto'],
     'randomforestregressor__min_samples_leaf': [2],
     'randomforestregressor__min_samples_split': [4, 5, 6],
-    'randomforestregressor__n_estimators': [950, 1000, 1050] 
+    'randomforestregressor__n_estimators': [950, 1000, 1050]
 }
 
 # Instantiate the grid search model
-grid_search = GridSearchCV(estimator = my_pipeline_RF, 
-                           param_grid = param_grid, 
-                           cv = 3, n_jobs = -1, verbose = 2, 
+grid_search = GridSearchCV(estimator = my_pipeline_RF,
+                           param_grid = param_grid,
+                           cv = 3, n_jobs = -1, verbose = 2,
                            scoring = 'neg_median_absolute_error')
 
 # Fit the grid search to the data
@@ -1685,11 +1685,11 @@ grid_search.best_params_
 ```
 
     Fitting 3 folds for each of 27 candidates, totalling 81 fits
-    
+
 
     [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 114.4min
     [Parallel(n_jobs=-1)]: Done  81 out of  81 | elapsed: 262.8min finished
-    
+
 
 
 
@@ -1725,21 +1725,21 @@ evaluate_model(my_pipeline_RF_grid, test_X, test_y)
 
     Median Absolute Error: 13.57
     RMSE: 125.04
-    
+
 
 We get better results with the tuned model than with default hyperparameters, but the improvement of the median absolute error is not amazing. Maybe we will have a better precision if we use another model.
 
 ### Application of the Gradient Boosting Regressor
 
 Let's try with the XGBoost gradient boosting model. This model often produces really good results in Kaggle competitions. The first step is to use it with the default hyperparameters.
-#### With default hyperparameters 
+#### With default hyperparameters
 
 
 ```python
 from xgboost import XGBRegressor
 
 # Create the pipeline: Imputation + Scale + MLP regressor
-my_pipeline_XGB = make_pipeline(Imputer(), StandardScaler(), 
+my_pipeline_XGB = make_pipeline(Imputer(), StandardScaler(),
                                 XGBRegressor(random_state = 42))
 
 # Fit the model
@@ -1750,7 +1750,7 @@ evaluate_model(my_pipeline_XGB, test_X, test_y)
 
     Median Absolute Error: 15.94
     RMSE: 120.88
-    
+
 
 For the moment, the tuned and even not tuned Random Forest models give better results. I want to see if hyperparameter tuning will make this model better than the Random Forest one.
 
@@ -1764,7 +1764,7 @@ pprint(my_pipeline_XGB.get_params())
 ```
 
     Parameters currently used:
-    
+
     {'imputer': Imputer(axis=0, copy=True, missing_values='NaN', strategy='mean', verbose=0),
      'imputer__axis': 0,
      'imputer__copy': True,
@@ -1814,20 +1814,20 @@ pprint(my_pipeline_XGB.get_params())
      'xgbregressor__seed': None,
      'xgbregressor__silent': True,
      'xgbregressor__subsample': 1}
-    
 
-#### Grid Search with Cross Validation 
+
+#### Grid Search with Cross Validation
 
 
 ```python
-param_grid = {'xgbregressor__learning_rate': [0.1, 0.05], 
+param_grid = {'xgbregressor__learning_rate': [0.1, 0.05],
               'xgbregressor__max_depth': [5, 7, 9],
               'xgbregressor__n_estimators': [100, 500, 900]}
 
 # Instantiate the grid search model
 grid_search = GridSearchCV(estimator = my_pipeline_XGB,
-                           param_grid = param_grid, 
-                           cv = 3, n_jobs = -1, verbose = 2, 
+                           param_grid = param_grid,
+                           cv = 3, n_jobs = -1, verbose = 2,
                            scoring = 'neg_median_absolute_error')
 
 # Fit the grid search to the data
@@ -1837,11 +1837,11 @@ grid_search.best_params_
 ```
 
     Fitting 3 folds for each of 18 candidates, totalling 54 fits
-    
+
 
     [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 27.0min
     [Parallel(n_jobs=-1)]: Done  54 out of  54 | elapsed: 48.5min finished
-    
+
 
 
 
@@ -1857,7 +1857,7 @@ grid_search.best_params_
 
 ```python
 # Create the pipeline: Imputation + Scale + MLP regressor
-my_pipeline_XGB_grid = make_pipeline(Imputer(), StandardScaler(), 
+my_pipeline_XGB_grid = make_pipeline(Imputer(), StandardScaler(),
                                      XGBRegressor(random_state = 42,
                                                   learning_rate = 0.05,
                                                   max_depth = 9,
@@ -1871,7 +1871,7 @@ evaluate_model(my_pipeline_XGB_grid, test_X, test_y)
 
     Median Absolute Error: 13.54
     RMSE: 120.78
-    
+
 
 The tuned XGBoost model gives better results than the not tuned one. It also gives almost the same results as the tuned Random Forest model (MAE: 13.57).
 
@@ -1879,14 +1879,14 @@ The tuned XGBoost model gives better results than the not tuned one. It also giv
 
 Now let's try a Neural Network, or to be more precise, a multilayer perceptron which is a class of Neural Network. I apply this regressor with default hyperparameters except from the maximum numer of iteration in order to let it run until the end.
 
-#### With default hyperparameters 
+#### With default hyperparameters
 
 
 ```python
 from sklearn.neural_network import MLPRegressor
 
 # Create the pipeline: Imputation + Scale + Feature Selection + MLP regressor
-my_pipeline_NN = make_pipeline(Imputer(), StandardScaler(), 
+my_pipeline_NN = make_pipeline(Imputer(), StandardScaler(),
                                MLPRegressor(random_state = 42,
                                             max_iter = 400))
 
@@ -1898,11 +1898,11 @@ evaluate_model(my_pipeline_NN, test_X, test_y)
 
     Median Absolute Error: 18.76
     RMSE: 124.0
-    
+
 
 The results are not very good compared to the two previous models. Let's try to tune this neural network, maybe the default parameters are very not good for this data.
 
-#### Grid Search with Cross Validation 
+#### Grid Search with Cross Validation
 
 
 ```python
@@ -1977,7 +1977,7 @@ param_grid = {
 }
 
 grid_search = GridSearchCV(estimator = my_pipeline_NN,
-                           param_grid = param_grid, 
+                           param_grid = param_grid,
                            cv = 3, n_jobs = -1, verbose = 2,
                            scoring = 'neg_median_absolute_error')
 
@@ -1987,14 +1987,14 @@ grid_search.best_params_
 ```
 
     Fitting 3 folds for each of 64 candidates, totalling 192 fits
-    
+
 
     [Parallel(n_jobs=-1)]: Done  33 tasks      | elapsed: 696.1min
     [Parallel(n_jobs=-1)]: Done 154 tasks      | elapsed: 797.8min
     [Parallel(n_jobs=-1)]: Done 192 out of 192 | elapsed: 831.4min finished
     C:\Anaconda3\lib\site-packages\sklearn\neural_network\multilayer_perceptron.py:564: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (400) reached and the optimization hasn't converged yet.
       % self.max_iter, ConvergenceWarning)
-    
+
 
 
 
@@ -2019,7 +2019,7 @@ my_pipeline_NN_grid = make_pipeline(Imputer(), StandardScaler(),
                                                  learning_rate_init = 0.0001,
                                                  solver = 'adam',
                                                  max_iter = 500,
-                                                 random_state = 42)) 
+                                                 random_state = 42))
 
 # Fit the model
 my_pipeline_NN_grid.fit(train_X, train_y)
@@ -2029,11 +2029,11 @@ evaluate_model(my_pipeline_NN_grid, test_X, test_y)
 
     Median Absolute Error: 15.23
     RMSE: 129.49
-    
+
 
     C:\Anaconda3\lib\site-packages\sklearn\neural_network\multilayer_perceptron.py:564: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (500) reached and the optimization hasn't converged yet.
       % self.max_iter, ConvergenceWarning)
-    
+
 
 The tuned Neural Network is much better than the one with default hyperparameters. However, it is still much less precise than the first two models.
 
@@ -2057,10 +2057,10 @@ plt.show()
 ![png](output_80_0.png)
 
 
-The tuned Random Forest and XGBoost gave the best results on the test set. Surprisingly, the Multi Layer Perceptron with default parameters gave the highest Median Absolute errors, and the tuned one did not even give better results than the default Random Forest. This is unusual, maybe the Multi Layer Perceptron needs more data to perform better, or it might need more tuning on important hyperparameters such as the hidden_layer_sizes. 
+The tuned Random Forest and XGBoost gave the best results on the test set. Surprisingly, the Multi Layer Perceptron with default parameters gave the highest Median Absolute errors, and the tuned one did not even give better results than the default Random Forest. This is unusual, maybe the Multi Layer Perceptron needs more data to perform better, or it might need more tuning on important hyperparameters such as the hidden_layer_sizes.
 
 ## Conclusion
 
-In this post we modelled Airbnb apartment prices using descriptive data from the airbnb website. First, we preprocessed the data to remove any redundant features and reduce the sparsity of the data. Then we applied three different algorithms, initially with default parameters which we then tuned. In our results the tuned Random Forest and tuned XGBoost performed best. 
+In this post we modelled Airbnb apartment prices using descriptive data from the airbnb website. First, we preprocessed the data to remove any redundant features and reduce the sparsity of the data. Then we applied three different algorithms, initially with default parameters which we then tuned. In our results the tuned Random Forest and tuned XGBoost performed best.
 
 To further improve our models we could include more feature engineering, for example time-based features. We could also try more extensive hyperparameter tuning. If you would like to give it a go yourself, the code and data for this post can be found on [GitHub](https://github.com/MangoTheCat/Modelling-Airbnb-Prices#XGB)
